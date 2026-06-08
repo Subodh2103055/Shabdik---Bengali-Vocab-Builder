@@ -1,0 +1,6 @@
+{
+  "name": "English-Bengali Vocabulary",
+  "description": "A elegant mobile-first vocabulary builder that delivers daily English words paired with authentic Bengali meanings, standard phonetic audios, real-time widgets, and multi-device data syncing.",
+  "requestFramePermissions": ["autoplay"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

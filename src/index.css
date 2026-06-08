@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+html, body {
+  overscroll-behavior-y: contain;
+}
+
+/* Theme overrides for Tailwind CSS v4 variables */
+.theme-cosmic {
+  /* Inherit original dark slate-amber default values */
+}
+
+.theme-sunlit {
+  /* Surface Overrides: Dark colors become warm cream colors */
+  --color-neutral-950: #FAF7F2;     /* Core screen canvas backdrop */
+  --color-neutral-900: #F3ECE1;     /* Container card bg */
+  --color-neutral-950\/95: rgba(250, 247, 242, 0.95);
+  --color-neutral-950\/90: rgba(250, 247, 242, 0.9);
+  --color-neutral-900\/90: rgba(243, 236, 225, 0.9);
+  --color-neutral-900\/60: rgba(243, 236, 225, 0.6);
+  --color-neutral-900\/40: rgba(243, 236, 225, 0.4);
+  --color-neutral-900\/30: rgba(243, 236, 225, 0.3);
+  --color-neutral-900\/20: rgba(243, 236, 225, 0.2);
+  --color-neutral-800: #E3D9C9;     /* Outer borders border-neutral-800 */
+  --color-neutral-850: #DAD0BE;
+  --color-neutral-700: #C4B9A7;
+  
+  /* Text Overrides: Light colors become readable stone/chocolate */
+  --color-neutral-100: #2C2621;     /* Primary text */
+  --color-neutral-50: #17120F;      /* Bold headings selection:bg-amber-400 */
+  --color-neutral-400: #6B6156;     /* Secondary descriptions */
+  --color-neutral-450: #574E45;
+  --color-neutral-500: #7A6F62;     /* Soft metadata icons */
+  --color-neutral-600: #8C8072;
+  --color-neutral-200: #3E3730;
+  --color-neutral-300: #4A423B;
+  
+  /* Amber Accent swaps to warm crimson/amber safety tone */
+  --color-amber-400: #CB7500;
+  --color-amber-400\/10: rgba(203, 117, 0, 0.1);
+  --color-amber-400\/20: rgba(203, 117, 0, 0.2);
+  --color-amber-300: #A85A00;
+  --color-amber-500: #8A4600;
+}
+
+.theme-emerald {
+  /* Surface Overrides: Deep emerald forest dark values */
+  --color-neutral-950: #060F0C;     /* Core dense green canvas background */
+  --color-neutral-900: #0E221C;     /* Cards background */
+  --color-neutral-950\/95: rgba(6, 15, 12, 0.95);
+  --color-neutral-950\/90: rgba(6, 15, 12, 0.90);
+  --color-neutral-900\/90: rgba(14, 34, 28, 0.9);
+  --color-neutral-900\/60: rgba(14, 34, 28, 0.6);
+  --color-neutral-900\/40: rgba(14, 34, 28, 0.4);
+  --color-neutral-900\/30: rgba(14, 34, 28, 0.3);
+  --color-neutral-900\/20: rgba(14, 34, 28, 0.2);
+  --color-neutral-800: #173B30;     /* Emerald border-neutral-800 */
+  --color-neutral-850: #1F4D3F;
+  --color-neutral-700: #296653;
+  
+  /* Text Overrides: Seafoam, mint, and pure ice-greens */
+  --color-neutral-100: #E6FDF5;     /* Primary text */
+  --color-neutral-50: #F0FDF8;      /* Headings text */
+  --color-neutral-400: #4ADE80;     /* Mint accent help text */
+  --color-neutral-450: #34D399;
+  --color-neutral-500: #10B981;
+  --color-neutral-600: #059669;
+  --color-neutral-200: #A7F3D0;
+  --color-neutral-300: #6EE7B7;
+  
+  /* Amber Accent shifts to glowing emerald tone */
+  --color-amber-400: #34D399;
+  --color-amber-400\/10: rgba(52, 211, 153, 0.1);
+  --color-amber-400\/20: rgba(52, 211, 153, 0.2);
+  --color-amber-300: #10B981;
+  --color-amber-500: #059669;
+}
+
+.theme-ocean {
+  /* Surface Overrides: Deep ocean blue values */
+  --color-neutral-950: #040914;     /* Core midnight ocean blue canvas background */
+  --color-neutral-900: #0C1530;     /* Cards background */
+  --color-neutral-950\/95: rgba(4, 9, 20, 0.95);
+  --color-neutral-950\/90: rgba(4, 9, 20, 0.90);
+  --color-neutral-900\/90: rgba(12, 21, 48, 0.9);
+  --color-neutral-900\/60: rgba(12, 21, 48, 0.6);
+  --color-neutral-900\/40: rgba(12, 21, 48, 0.4);
+  --color-neutral-900\/30: rgba(12, 21, 48, 0.3);
+  --color-neutral-900\/20: rgba(12, 21, 48, 0.2);
+  --color-neutral-800: #1C2B54;     /* Ocean border-neutral-800 */
+  --color-neutral-850: #24376C;
+  --color-neutral-700: #324E96;
+  
+  /* Text Overrides: Glacier blue, ice-blue, and pure sky whites */
+  --color-neutral-100: #EEF2FF;     /* Primary text */
+  --color-neutral-50: #F8FAFC;      /* Headings text */
+  --color-neutral-400: #38BDF8;     /* Sky blue accent help text */
+  --color-neutral-450: #0EA5E9;
+  --color-neutral-500: #0284C7;
+  --color-neutral-600: #0369A1;
+  --color-neutral-200: #BAE6FD;
+  --color-neutral-300: #7DD3FC;
+  
+  /* Accent changes to glowing azure/cyan blue */
+  --color-amber-400: #38BDF8;
+  --color-amber-400\/10: rgba(56, 189, 248, 0.1);
+  --color-amber-400\/20: rgba(56, 189, 248, 0.2);
+  --color-amber-300: #0284C7;
+  --color-amber-500: #0369A1;
+}
+
+.theme-rose {
+  /* Surface Overrides: Deep crimson velvet royal/plum values */
+  --color-neutral-950: #0F0408;     /* Core dark cherry wine canvas background */
+  --color-neutral-900: #220B14;     /* Cards background */
+  --color-neutral-950\/95: rgba(15, 4, 8, 0.95);
+  --color-neutral-950\/90: rgba(15, 4, 8, 0.90);
+  --color-neutral-900\/90: rgba(34, 11, 20, 0.9);
+  --color-neutral-900\/60: rgba(34, 11, 20, 0.6);
+  --color-neutral-900\/40: rgba(34, 11, 20, 0.4);
+  --color-neutral-900\/30: rgba(34, 11, 20, 0.3);
+  --color-neutral-900\/20: rgba(34, 11, 20, 0.2);
+  --color-neutral-800: #3D0F22;     /* Velvet border-neutral-800 */
+  --color-neutral-850: #4A1229;
+  --color-neutral-700: #651838;
+  
+  /* Text Overrides: Blush pinks and ivory roses */
+  --color-neutral-100: #FFF1F2;     /* Primary text */
+  --color-neutral-50: #FFF5F5;      /* Headings text */
+  --color-neutral-400: #FB7185;     /* Rose accent help text */
+  --color-neutral-450: #F43F5E;
+  --color-neutral-500: #E11D48;
+  --color-neutral-600: #BE123C;
+  --color-neutral-200: #FECDD3;
+  --color-neutral-300: #FDA4AF;
+  
+  /* Amber Accent shifts to sweet rose gold / crimson rose */
+  --color-amber-400: #FB7185;
+  --color-amber-400\/10: rgba(251, 113, 133, 0.1);
+  --color-amber-400\/20: rgba(251, 113, 133, 0.2);
+  --color-amber-300: #E11D48;
+  --color-amber-500: #BE123C;
+}
+
+/* 3D Flip Card Utilities for Flashcard Practice Module */
+.perspe-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Scrollbar cleanups */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
