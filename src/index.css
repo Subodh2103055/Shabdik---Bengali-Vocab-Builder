@@ -202,3 +202,27 @@ html, body {
 .animate-fade-in {
   animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Smooth global transitions for theme changes (fading background-colors, borders, and text) */
+body, 
+div, 
+header, 
+main, 
+aside, 
+footer, 
+button, 
+p, 
+span, 
+h1, 
+h2, 
+h3, 
+h4, 
+h5, 
+h6, 
+section, 
+input, 
+textarea, 
+label {
+  transition: background-color 300ms ease-out, border-color 300ms ease-out, color 300ms ease-out, box-shadow 300ms ease-out;
+}
+

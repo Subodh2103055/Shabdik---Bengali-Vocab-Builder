@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import PhoneSimulator from './components/PhoneSimulator';
 import HomeView from './components/HomeView';
 import DeckView from './components/DeckView';
@@ -890,59 +891,70 @@ export default function App() {
 
       {/* Primary Dashboard layout conditionally styled by viewMode */}
       {viewMode === 'simulator' ? (
-        <main className="max-w-md w-full mx-auto flex flex-col items-center justify-center gap-4 animate-fade-in text-left">
+        <main className="max-w-md w-full mx-auto flex flex-col items-center justify-center gap-4 animate-fade-in text-left animate-once">
           <PhoneSimulator 
             activeTab={activeTab} 
             setActiveTab={setActiveTab}
             streak={streak}
           >
-            {activeTab === 'home' && (
-              <HomeView
-                currentWord={currentWord}
-                isLoadingNewWord={isLoadingNewWord}
-                onRefreshWord={handleRefreshWordByGemini}
-                onSearchWord={handleSearchWord}
-                isSaved={isSaved}
-                onSaveToggle={handleSaveToggle}
-                streak={streak}
-                onMarkChecked={handleMarkChecked}
-                isCheckedToday={isCheckedToday}
-                showToast={showToast}
-                searchFeedback={searchFeedback}
-                onClearSearchFeedback={() => setSearchFeedback(null)}
-              />
-            )}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="w-full flex-1 flex flex-col"
+              >
+                {activeTab === 'home' && (
+                  <HomeView
+                    currentWord={currentWord}
+                    isLoadingNewWord={isLoadingNewWord}
+                    onRefreshWord={handleRefreshWordByGemini}
+                    onSearchWord={handleSearchWord}
+                    isSaved={isSaved}
+                    onSaveToggle={handleSaveToggle}
+                    streak={streak}
+                    onMarkChecked={handleMarkChecked}
+                    isCheckedToday={isCheckedToday}
+                    showToast={showToast}
+                    searchFeedback={searchFeedback}
+                    onClearSearchFeedback={() => setSearchFeedback(null)}
+                  />
+                )}
 
-            {activeTab === 'deck' && (
-              <DeckView
-                savedWords={savedWords}
-                onRemoveWord={handleRemoveWord}
-                masteredWords={masteredWords}
-                onToggleMastered={handleToggleMastered}
-                showToast={showToast}
-              />
-            )}
+                {activeTab === 'deck' && (
+                  <DeckView
+                    savedWords={savedWords}
+                    onRemoveWord={handleRemoveWord}
+                    masteredWords={masteredWords}
+                    onToggleMastered={handleToggleMastered}
+                    showToast={showToast}
+                  />
+                )}
 
-            {activeTab === 'sync' && (
-              <SyncView
-                syncId={syncId}
-                setSyncId={setSyncId}
-                onCloudSave={handleCloudSaveState}
-                onCloudLoad={handleCloudLoadState}
-                isSyncing={isSyncing}
-                onNewSyncIdGenerated={handleNewSyncIdGenerated}
-              />
-            )}
+                {activeTab === 'sync' && (
+                  <SyncView
+                    syncId={syncId}
+                    setSyncId={setSyncId}
+                    onCloudSave={handleCloudSaveState}
+                    onCloudLoad={handleCloudLoadState}
+                    isSyncing={isSyncing}
+                    onNewSyncIdGenerated={handleNewSyncIdGenerated}
+                  />
+                )}
 
-            {activeTab === 'translate' && (
-              <TranslateView showToast={showToast} />
-            )}
+                {activeTab === 'translate' && (
+                  <TranslateView showToast={showToast} />
+                )}
 
-            {activeTab === 'creator' && (
-              <div className="animate-fade-in py-1 pb-6">
-                <DeveloperNote />
-              </div>
-            )}
+                {activeTab === 'creator' && (
+                  <div className="py-1 pb-6 w-full">
+                    <DeveloperNote />
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </PhoneSimulator>
         </main>
       ) : (
@@ -1087,54 +1099,65 @@ export default function App() {
           <div className="col-span-12 lg:col-span-8 xl:col-span-9 flex flex-col gap-6 w-full pb-24 lg:pb-0 lg:h-full lg:max-h-full lg:overflow-y-auto lg:pr-2">
             
             {/* Main Application active page view frame (Sized properly for PC views) */}
-            <div className="bg-neutral-900/30 border border-neutral-900/90 rounded-[28px] p-6 lg:min-h-[520px] min-h-[300px]">
-              {activeTab === 'home' && (
-                <HomeView
-                  currentWord={currentWord}
-                  isLoadingNewWord={isLoadingNewWord}
-                  onRefreshWord={handleRefreshWordByGemini}
-                  onSearchWord={handleSearchWord}
-                  isSaved={isSaved}
-                  onSaveToggle={handleSaveToggle}
-                  streak={streak}
-                  onMarkChecked={handleMarkChecked}
-                  isCheckedToday={isCheckedToday}
-                  showToast={showToast}
-                  searchFeedback={searchFeedback}
-                  onClearSearchFeedback={() => setSearchFeedback(null)}
-                />
-              )}
+            <div className="bg-neutral-900/30 border border-neutral-900/90 rounded-[28px] p-6 lg:min-h-[520px] min-h-[300px] flex flex-col justify-stretch">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 12, scale: 0.995 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -12, scale: 0.995 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="w-full h-full flex-1 flex flex-col"
+                >
+                  {activeTab === 'home' && (
+                    <HomeView
+                      currentWord={currentWord}
+                      isLoadingNewWord={isLoadingNewWord}
+                      onRefreshWord={handleRefreshWordByGemini}
+                      onSearchWord={handleSearchWord}
+                      isSaved={isSaved}
+                      onSaveToggle={handleSaveToggle}
+                      streak={streak}
+                      onMarkChecked={handleMarkChecked}
+                      isCheckedToday={isCheckedToday}
+                      showToast={showToast}
+                      searchFeedback={searchFeedback}
+                      onClearSearchFeedback={() => setSearchFeedback(null)}
+                    />
+                  )}
 
-              {activeTab === 'deck' && (
-                <DeckView
-                  savedWords={savedWords}
-                  onRemoveWord={handleRemoveWord}
-                  masteredWords={masteredWords}
-                  onToggleMastered={handleToggleMastered}
-                  showToast={showToast}
-                />
-              )}
+                  {activeTab === 'deck' && (
+                    <DeckView
+                      savedWords={savedWords}
+                      onRemoveWord={handleRemoveWord}
+                      masteredWords={masteredWords}
+                      onToggleMastered={handleToggleMastered}
+                      showToast={showToast}
+                    />
+                  )}
 
-              {activeTab === 'sync' && (
-                <SyncView
-                  syncId={syncId}
-                  setSyncId={setSyncId}
-                  onCloudSave={handleCloudSaveState}
-                  onCloudLoad={handleCloudLoadState}
-                  isSyncing={isSyncing}
-                  onNewSyncIdGenerated={handleNewSyncIdGenerated}
-                />
-              )}
+                  {activeTab === 'sync' && (
+                    <SyncView
+                      syncId={syncId}
+                      setSyncId={setSyncId}
+                      onCloudSave={handleCloudSaveState}
+                      onCloudLoad={handleCloudLoadState}
+                      isSyncing={isSyncing}
+                      onNewSyncIdGenerated={handleNewSyncIdGenerated}
+                    />
+                  )}
 
-              {activeTab === 'translate' && (
-                <TranslateView showToast={showToast} />
-              )}
+                  {activeTab === 'translate' && (
+                    <TranslateView showToast={showToast} />
+                  )}
 
-              {activeTab === 'creator' && (
-                <div className="animate-fade-in max-w-xl mx-auto py-2">
-                  <DeveloperNote />
-                </div>
-              )}
+                  {activeTab === 'creator' && (
+                    <div className="max-w-xl mx-auto py-2 w-full">
+                      <DeveloperNote />
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
 
           </div>
