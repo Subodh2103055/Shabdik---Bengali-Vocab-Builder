@@ -160,6 +160,32 @@ html, body {
 }
 
 /* Scrollbar cleanups */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-neutral-800, #262626);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-amber-400, #cb7500);
+}
+
+/* Firefox scrollbars support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-800, #262626) transparent;
+}
+
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
