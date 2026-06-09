@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { OFFLINE_DICTIONARY } from "./src/data/offlineDictionary";
@@ -878,62 +877,77 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
     const targetLang = mode === "en-to-bn" ? "Bengali" : "English";
 
     if (!client) {
-      console.log(`[Offline Translator Setup] No Gemini API key detected. Using local simulator logic for mode: ${mode}`);
-      // Simple offline translation mapping or fallbacks
+      console.log(`[Offline Translator Setup] No Gemini API key detected. Attempting keyless translation engine fallback.`);
+      
+      const sl = mode === "en-to-bn" ? "en" : "bn";
+      const tl = mode === "en-to-bn" ? "bn" : "en";
+      
       let translationText = "";
-      let notesText = "Set your Gemini API Key in Settings > Secrets to unlock unlimited live translation and get AI grammar breakdowns immediately!";
+      let notesText = "Set your Gemini API Key in Settings > Secrets to unlock full AI grammar breakdowns and detailed linguistic insights for every phrase!";
 
-      // Basic offline presets
-      const lowercaseInput = cleanInput.toLowerCase().replace(/[.,?!]/g, "").trim();
-      const offlineTranslations: Record<string, { translation: string, notes: string }> = {
-        "how are you": {
-          translation: "আপনি কেমন আছেন?",
-          notes: "Vocabulary breakdown:\n• How - কেমন\n• Are - হন\n• You - আপনি/তুমি\n\nThis is a common polite greeting in Bengali! 'আপনি' (apni) is formal/respectful, while 'তুমি' (tumi) is informal for friends."
-        },
-        "consistency is the key to mastering any language": {
-          translation: "যেকোনো ভাষায় পারদর্শী হওয়ার চাবিকাঠি হলো ধারাবাহিকতা।",
-          notes: "Vocabulary breakdown:\n• Consistency - ধারাবাহিকতা\n• Key - চাবিকাঠি\n• Mastering - পারদর্শী হওয়া\n• Language - ভাষা"
-        },
-        "a resilient mindset helps you conquer lifes setbacks": {
-          translation: "একটি স্থিতিস্থাপক মানসিকতা আপনাকে জীবনের বিপর্যয় বা বাধা জয় করতে সাহায্য করে।",
-          notes: "Vocabulary breakdown:\n• Resilient - স্থিতিস্থাপক / স্থিতিশীল\n• Mindset - মানসিকতা\n• Conquer - জয় করা\n• Setbacks - বিপর্যয় বা বাধা"
-        },
-        "the presentation of his work was meticulous and elegant": {
-          translation: "তার কাজের উপস্থাপনা অত্যন্ত নিখুঁত এবং মার্জিত ছিল।",
-          notes: "Vocabulary breakdown:\n• Presentation - উপস্থাপনা\n• Meticulous - অতি যত্নশীল / নিখুঁত\n• Elegant - মার্জিত / নান্দনিক"
-        },
-        "জ্ঞানই শক্তি এবং শিক্ষা হলো উন্নতির চাবিকাঠি": {
-          translation: "Knowledge is power and education is the key to progress.",
-          notes: "শব্দার্থ বিশ্লেষণ (Bengali to English):\n• জ্ঞানই (Knowledge - with positive emphasis 'ই')\n• শক্তি (Power / Strength)\n• শিক্ষা (Education)\n• উন্নতি (Progress / Development / Improvement)\n• চাবিকাঠি (Key / Gateway)"
-        },
-        "আমি প্রতিদিন নতুন ইংরেজি শব্দ শিখতে ভালোবাসি": {
-          translation: "I love learning new English words every day.",
-          notes: "শব্দার্থ বিশ্লেষণ (Bengali to English):\n• আমি (I)\n• প্রতিদিন (Every day)\n• নতুন (New)\n• ইংরেজি (English)\n• শব্দ (Words / Vocabulary)\n• শিখতে (To learn)\n• ভালোবাসি (I love / I like)"
-        },
-        "ধৈর্য ও কঠোর পরিশ্রম অবশেষে সফলতা বয়ে আনে": {
-          translation: "Patience and hard work finally bring success.",
-          notes: "শব্দার্থ বিশ্লেষণ (Bengali to English):\n• ধৈর্য (Patience / Perseverance)\n• কঠোর পরিশ্রম (Hard work / Diligent efforts)\n• অবশেষে (Finally / Eventually / Ultimately)\n• সফলতা (Success)\n• বয়ে আনে (Brings / Yields)"
-        }
-      };
-
-      if (offlineTranslations[lowercaseInput]) {
-        translationText = offlineTranslations[lowercaseInput].translation;
-        notesText = offlineTranslations[lowercaseInput].notes;
-      } else {
-        // Fallback for custom queries
-        if (mode === "en-to-bn") {
-          // Check if any word in the text matches some LOCAL_WORDS
-          const matched = LOCAL_WORDS.find(w => cleanInput.toLowerCase().includes(w.word.toLowerCase()));
-          if (matched) {
-            translationText = `[অফলাইন ডেমো] এই ইংরেজি বাক্যের শব্দ বা উপাদানটি অফলাইন তালিকায় মিলেছে। বাক্যটি: "${matched.word}" যার বাংলা: "${matched.bengaliMeaning}"।`;
-            notesText = `শব্দার্থ নোট (Offline matched keyword):\n${matched.word} (${matched.partOfSpeech}) - ${matched.bengaliMeaning}\nIPA: ${matched.ipa}\n\nইংরেজির জন্য সংজ্ঞা:\n"${matched.definition}"\n\nঅনুগ্রহ করে Settings > Secrets প্যানেলে Gemini API Key সেট করুন লাইভ অনুমাদের জন্য।`;
-          } else {
-            translationText = `[অফলাইন ডেমো] আপনার ইনপুট কৃত ইংরেজি বাক্য: "${cleanInput}"। এপিআই কী অনুপস্থিত থাকায় লাইভ অনুবাদ ডেমো দেখতে পাচ্ছেন।`;
-            notesText = `লাইভ কানেক্টিভিটি গাইড:\n১. স্ক্রিনের উপরের 'Settings > Secrets' এ যান।\n২. 'GEMINI_API_KEY' ভেরিয়েবলে আপনার সঠিক API কী দিন।\n৩. পুরো ইন্টারনেট ভিত্তিক অনুবাদ ও ব্যাকরণ নোট সচল করুন!`;
-          }
+      try {
+        // Try dynamic keyless translation first so it works for ANY manual input beautifully!
+        const result = await fetchTranslation(cleanInput, sl, tl);
+        if (result && result !== cleanInput) {
+          translationText = result;
+          notesText = `💡 **লাইভ ডেমো অনুবাদ সফল!**\n\nসার্ভারটি গুগল ট্রান্সলেশন গেটওয়ে ব্যবহার করে এই অনুবাদটি সম্পন্ন করেছে।\n\nআপনি যদি বাক্যটির গভীর ব্যাকরণগত বিশ্লেষণ ও উচ্চারণ নোটস (এআই লার্নিং মেট্রিক্স) চান, তাহলে স্ক্রিনের উপরের 'Settings > Secrets' প্যানেলে 'GEMINI_API_KEY' যুক্ত করুন।`;
         } else {
-          translationText = `[Offline Demo] Entered Bengali text: "${cleanInput}". Please connect a valid Gemini API Key to translate dynamically.`;
-          notesText = `How to activate AI Translation:\n1. Click on Settings > Secrets (top-right developer menu).\n2. Add your 'GEMINI_API_KEY' variable.\n3. Instantly translate any phrase or text from Bengali to English and get real learning charts!`;
+          throw new Error("Translation match same as source");
+        }
+      } catch (err: any) {
+        console.log(`[Keyless Translator Fallback] Could not complete keyless translation: ${err.message}. Relying on presets.`);
+        
+        // Basic offline presets
+        const lowercaseInput = cleanInput.toLowerCase().replace(/[.,?!]/g, "").trim();
+        const offlineTranslations: Record<string, { translation: string, notes: string }> = {
+          "how are you": {
+            translation: "আপনি কেমন আছেন?",
+            notes: "Vocabulary breakdown:\n• How - কেমন\n• Are - হন\n• You - আপনি/তুমি\n\nThis is a common polite greeting in Bengali! 'আপনি' (apni) is formal/respectful, while 'তুমি' (tumi) is informal for friends."
+          },
+          "consistency is the key to mastering any language": {
+            translation: "যেকোনো ভাষায় পারদর্শী হওয়ার চাবিকাঠি হলো ধারাবাহিকতা।",
+            notes: "Vocabulary breakdown:\n• Consistency - ধারাবাহিকতা\n• Key - চাবিকাঠি\n• Mastering - পারদর্শী হওয়া\n• Language - ভাষা"
+          },
+          "a resilient mindset helps you conquer lifes setbacks": {
+            translation: "একটি স্থিতিস্থাপক মানসিকতা আপনাকে জীবনের বিপর্যয় বা বাধা জয় করতে সাহায্য করে।",
+            notes: "Vocabulary breakdown:\n• Resilient - স্থিতিস্থাপক / স্থিতিশীল\n• Mindset - মানসিকতা\n• Conquer - জয় করা\n• Setbacks - বিপর্যয় বা বাধা"
+          },
+          "the presentation of his work was meticulous and elegant": {
+            translation: "তার কাজের উপস্থাপনা অত্যন্ত নিখুঁত এবং মার্জিত ছিল।",
+            notes: "Vocabulary breakdown:\n• Presentation - উপস্থাপনা\n• Meticulous - অতি যত্নশীল / নিখুঁত\n• Elegant - মার্জিত / নান্দনিক"
+          },
+          "জ্ঞানই শক্তি এবং শিক্ষা হলো উন্নতির চাবিকাঠি": {
+            translation: "Knowledge is power and education is the key to progress.",
+            notes: "শব্দার্থ বিশ্লেষণ (Bengali to English):\n• জ্ঞানই (Knowledge - with positive emphasis 'ই')\n• শক্তি (Power / Strength)\n• শিক্ষা (Education)\n• উন্নতি (Progress / Development / Improvement)\n• চাবিকাঠি (Key / Gateway)"
+          },
+          "আমি প্রতিদিন নতুন ইংরেজি শব্দ শিখতে ভালোবাসি": {
+            translation: "I love learning new English words every day.",
+            notes: "শব্দার্থ বিশ্লেষণ (Bengali to English):\n• আমি (I)\n• প্রতিদিন (Every day)\n• নতুন (New)\n• ইংরেজি (English)\n• শব্দ (Words / Vocabulary)\n• শিখতে (To learn)\n• ভালোবাসি (I love / I like)"
+          },
+          "ধৈর্য ও কঠোর পরিশ্রম অবশেষে সফলতা বয়ে আনে": {
+            translation: "Patience and hard work finally bring success.",
+            notes: "শব্দার্থ বিশ্লেষণ (Bengali to English):\n• ধৈর্য (Patience / Perseverance)\n• কঠোর পরিশ্রম (Hard work / Diligent efforts)\n• অবশেষে (Finally / Eventually / Ultimately)\n• সফলতা (Success)\n• বয়ে আনে (Brings / Yields)"
+          }
+        };
+
+        if (offlineTranslations[lowercaseInput]) {
+          translationText = offlineTranslations[lowercaseInput].translation;
+          notesText = offlineTranslations[lowercaseInput].notes;
+        } else {
+          // Fallback for custom queries
+          if (mode === "en-to-bn") {
+            const matched = LOCAL_WORDS.find(w => cleanInput.toLowerCase().includes(w.word.toLowerCase()));
+            if (matched) {
+              translationText = `[অফলাইন ডেমো] এই ইংরেজি বাক্যের শব্দ বা উপাদানটি অফলাইন তালিকায় মিলেছে। বাক্যটি: "${matched.word}" যার বাংলা: "${matched.bengaliMeaning}"।`;
+              notesText = `শব্দার্থ নোট (Offline matched keyword):\n${matched.word} (${matched.partOfSpeech}) - ${matched.bengaliMeaning}\nIPA: ${matched.ipa}\n\nইংরেজির জন্য সংজ্ঞা:\n"${matched.definition}"\n\nঅনুগ্রহ করে Settings > Secrets প্যানেলে Gemini API Key সেট করুন লাইভ অনুমাদের জন্য।`;
+            } else {
+              translationText = `[অফলাইন ডেমো] আপনার ইনপুট কৃত ইংরেজি বাক্য: "${cleanInput}"। এপিআই কী অনুপস্থিত থাকায় লাইভ অনুবাদ ডেমো দেখতে পাচ্ছেন।`;
+              notesText = `লাইভ কানেক্টিভিটি গাইড:\n১. স্ক্রিনের উপরের 'Settings > Secrets' এ যান।\n২. 'GEMINI_API_KEY' ভেরিয়েবলে আপনার সঠিক API কী দিন।\n৩. পুরো ইন্টারনেট ভিত্তিক অনুবাদ ও ব্যাকরণ নোট সচল করুন!`;
+            }
+          } else {
+            translationText = `[Offline Demo] Entered Bengali text: "${cleanInput}". Please connect a valid Gemini API Key to translate dynamically.`;
+            notesText = `How to activate AI Translation:\n1. Click on Settings > Secrets (top-right developer menu).\n2. Add your 'GEMINI_API_KEY' variable.\n3. Instantly translate any phrase or text from Bengali to English and get real learning charts!`;
+          }
         }
       }
 
@@ -1062,22 +1076,35 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   });
 
   // Active Vite Integration
-  const distPath = path.join(process.cwd(), "dist");
-  const hasDist = fs.existsSync(distPath);
+  // Find dist directory robustly, ensuring index.html exists
+  let distPath = path.join(process.cwd(), "dist");
+  if (!fs.existsSync(path.join(distPath, "index.html"))) {
+    if (fs.existsSync(path.join(__dirname, "index.html"))) {
+      distPath = __dirname;
+    } else if (fs.existsSync(path.join(__dirname, "dist", "index.html"))) {
+      distPath = path.join(__dirname, "dist");
+    }
+  }
+  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
 
   if (process.env.NODE_ENV !== "production" || !hasDist) {
     console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
     let viteDevServer: any = null;
-    const viteInitializationPromise = createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    }).then(vite => {
-      viteDevServer = vite;
-      console.log(`[Vite] Dev server middleware initialized successfully!`);
-      return vite;
-    }).catch(err => {
-      console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
-    });
+    const viteInitializationPromise = import("vite")
+      .then((viteModule) => {
+        return viteModule.createServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+      })
+      .then(vite => {
+        viteDevServer = vite;
+        console.log(`[Vite] Dev server middleware initialized successfully!`);
+        return vite;
+      })
+      .catch(err => {
+        console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
+      });
 
     app.use(async (req, res, next) => {
       if (!viteDevServer) {

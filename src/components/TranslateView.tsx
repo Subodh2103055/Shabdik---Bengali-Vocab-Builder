@@ -115,12 +115,44 @@ export default function TranslateView({
     } catch (err) {
       console.error("Translation request error:", err);
       setIsOfflineMode(true);
-      // Simulate fallback translation client-side
+
+      // Attempt keyless Google Translate API fetch directly from the browser as a last-resort fallback!
+      try {
+        const sl = mode === 'en-to-bn' ? 'en' : 'bn';
+        const tl = mode === 'en-to-bn' ? 'bn' : 'en';
+        const directUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(queryText)}`;
+        const directRes = await fetch(directUrl);
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          if (Array.isArray(directData) && directData[0]) {
+            let translated = "";
+            for (const piece of directData[0]) {
+              if (piece && piece[0]) {
+                translated += piece[0];
+              }
+            }
+            if (translated.trim()) {
+              setTranslation(translated.trim());
+              setNotes("⚠️ **[ব্রাউজার সিঙ্ক মোড]** মূল সার্ভার সংযোগে সাময়িক বাধা সৃষ্টি হয়েছে (যেমন: Brave Shields বা Adblocker দ্বারা থার্ড-পার্টি কুকি ব্লক)। ব্রাউজার সরাসরি গুগল গেটওয়ে ব্যবহার করে অনুবাদটি সম্পন্ন করেছে।");
+              return;
+            }
+          }
+        }
+      } catch (browserErr) {
+        console.warn("Direct browser translation gateway fallback skipped:", browserErr);
+      }
+
+      // Final fallback if direct connection is also failing
       const simulatedTrans = mode === 'en-to-bn' 
-        ? `[অফলাইন মোড] "${queryText}" এর অনুবাদের জন্য এপিআই কী সংযুক্ত করুন।` 
-        : `[Offline Mode] Connect Gemini API key to translate: "${queryText}".`;
+        ? `[সংযোগ মোড] "${queryText}" এর অনুবাদের জন্য সার্ভারে পৌঁছানো যায়নি।` 
+        : `[Connection Warning] Could not reach server to translate: "${queryText}".`;
       setTranslation(simulatedTrans);
-      setNotes("");
+      
+      setNotes(
+        "💡 **ব্রাউজার সংযোগ সংক্রান্ত গুরুত্বপূর্ণ সহযোগিতা নির্দেশিকা:**\n\n" +
+        "১. **ব্রাউজার ট্র্যাকিং ও শিল্ড (Brave Shields / Adblockers):** আপনার ব্রাউজার (যেমন Brave Browser, macOS Safari, অথবা Chrome Incognito) এআই স্টুডিওর প্রয়োজনীয় নিরাপত্তা ও অথরাইজেশন কুকিজ ব্লক করে রাখছে। অনুগ্রহ করে ব্রাউজার অ্যাড্রেস বারের পাশে সিংগা বা শিল্ড আইকনে ক্লিক করে **Shields OFF (শিল্ড বন্ধ)** করুন অথবা থার্ড-পার্টি কুকিজের অনুমতি দিন।\n\n" +
+        "২. **শেয়ারড লিংকে প্রবেশাধিকার ত্রুটি (403 Forbidden Error):** বন্ধুদের সাথে শেয়ার করার জন্য সরাসরি এই ডেভেলপমেন্ট লিংক পাঠালে নিরাপত্তা নীতির কারণে তারা প্রবেশ করতে পারবে না। অন্যদের সাথে শেয়ার করতে গুগল এআই স্টুডিও ইন্টারফেসের একদম উপরে ডানপাশের **Share** বা **Deploy to Cloud Run** অপশন ব্যবহার করুন।"
+      );
     } finally {
       setIsLoading(false);
     }
