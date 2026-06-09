@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { OFFLINE_DICTIONARY } from "./src/data/offlineDictionary";
@@ -422,7 +421,7 @@ const PORT = 3000;
 // Middleware
 app.use(express.json());
 
-  // API Endpoints
+// API Endpoints
   
   // 1. Get Daily Deterministic Word
   app.get("/api/word/daily", (req, res) => {
@@ -931,41 +930,45 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
     res.json({ success: true, data: stored.data, updatedAt: stored.updatedAt });
   });
 
-  // Active Vite Integration
-  const distPath = path.join(process.cwd(), "dist");
-  const hasDist = fs.existsSync(distPath);
+  // Active Vite Integration (Only when NOT running on Vercel)
+  if (!process.env.VERCEL) {
+    const distPath = path.join(process.cwd(), "dist");
+    const hasDist = fs.existsSync(distPath);
 
-  if (process.env.NODE_ENV !== "production" || !hasDist) {
-    console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
-    let viteDevServer: any = null;
-    const viteInitializationPromise = createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    }).then(vite => {
-      viteDevServer = vite;
-      console.log(`[Vite] Dev server middleware initialized successfully!`);
-      return vite;
-    }).catch(err => {
-      console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
-    });
+    if (process.env.NODE_ENV !== "production" || !hasDist) {
+      console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
+      let viteDevServer: any = null;
+      const viteInitializationPromise = import("vite").then(({ createServer }) => {
+        return createServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+      }).then(vite => {
+        viteDevServer = vite;
+        console.log(`[Vite] Dev server middleware initialized successfully!`);
+        return vite;
+      }).catch(err => {
+        console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
+      });
 
-    app.use(async (req, res, next) => {
-      if (!viteDevServer) {
-        console.log(`[Server] Holdup: request "${req.url}" is waiting for Vite dev server initialization...`);
-        await viteInitializationPromise;
-      }
-      if (viteDevServer) {
-        viteDevServer.middlewares(req, res, next);
-      } else {
-        res.status(503).send("Vite Development Server is starting up. Please reload in a few seconds.");
-      }
-    });
-  } else {
-    console.log(`[Server] Starting in PRODUCTION mode (Serving static assets from ${distPath})`);
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+      app.use(async (req, res, next) => {
+        if (!viteDevServer) {
+          console.log(`[Server] Holdup: request "${req.url}" is waiting for Vite dev server initialization...`);
+          await viteInitializationPromise;
+        }
+        if (viteDevServer) {
+          viteDevServer.middlewares(req, res, next);
+        } else {
+          res.status(503).send("Vite Development Server is starting up. Please reload in a few seconds.");
+        }
+      });
+    } else {
+      console.log(`[Server] Starting in PRODUCTION mode (Serving static assets from ${distPath})`);
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   }
 
 if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
