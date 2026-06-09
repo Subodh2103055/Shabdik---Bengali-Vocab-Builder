@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Languages, Volume2, Copy, Trash2, ArrowUpDown, RefreshCw, Check, Sparkles, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { speakText } from '../lib/tts';
+import { translateTextDirect } from '../lib/gemini';
 
 interface HistoryItem {
   id: string;
@@ -79,13 +80,38 @@ export default function TranslateView({
 
     setIsLoading(true);
     try {
-      const res = await fetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: queryText, mode })
-      });
-      
-      const data = await res.json();
+      // 1. Attempt Client-Side Direct Gemini Translation
+      let data = { success: false, translation: "", notes: "", isOffline: false };
+      try {
+        console.log(`[TranslateView] Performing frontend-direct translation for: "${queryText}"`);
+        const result = await translateTextDirect(queryText, mode);
+        data = {
+          success: true,
+          translation: result.translation,
+          notes: result.notes,
+          isOffline: false
+        };
+      } catch (geminiClientErr: any) {
+        console.warn("[TranslateView] Client-side Gemini translation failed, trying fallback gateway:", geminiClientErr.message || geminiClientErr);
+        
+        // Fallback to backend API
+        const res = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: queryText, mode })
+        });
+        
+        const backendData = await res.json();
+        if (backendData.success) {
+          data = {
+            success: true,
+            translation: backendData.translation,
+            notes: backendData.notes || "",
+            isOffline: !!backendData.isOffline
+          };
+        }
+      }
+
       if (data.success) {
         setTranslation(data.translation);
         setNotes(data.notes || "");

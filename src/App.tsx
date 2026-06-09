@@ -11,6 +11,7 @@ import shabdikLogo from './assets/images/shabdik_logo_1780641345322.png';
 import { Word, UserStats, Difficulty, SyncData } from './types';
 import { OFFLINE_DICTIONARY as SEED_WORDS } from './data/offlineDictionary';
 import { BookOpen, Sparkles, Award, Layers, Smartphone, RefreshCw, Flame, Key, Monitor, Languages, Heart } from 'lucide-react';
+import { searchWordDirect, generateWordDirect } from './lib/gemini';
 
 export default function App() {
   // Flag to temporarily disable auto-saving when we are fetching/merging from the cloud
@@ -296,93 +297,117 @@ export default function App() {
     }
   };
 
-  // Refresh Word dynamically calling Gemini AI on server
+  // Refresh Word dynamically calling Gemini AI
   const handleRefreshWordByGemini = async (difficulty: Difficulty) => {
     setIsLoadingNewWord(true);
-    try {
-      // Package existing words to exclude them from the next selection
-      const excludeWords = [currentWord?.word].filter(Boolean) as string[];
-      savedWords.forEach(w => {
-        if (w?.word && !excludeWords.includes(w.word)) {
-          excludeWords.push(w.word);
-        }
-      });
-
-      const res = await fetch("/api/word/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ difficulty, excludeWords })
-      });
-      const data = await res.json();
-      if (data.success && data.word) {
-        setCurrentWord(data.word);
-        if (data.isFallback) {
-          showToast(`Offline Cache Word: ${data.word.word}`);
-        } else {
-          showToast(`Gemini successfully generated: ${data.word.word}!`);
-        }
-      } else {
-        throw new Error("Failed success flag from server");
+    // Package existing words to exclude them from the next selection
+    const excludeWords = [currentWord?.word].filter(Boolean) as string[];
+    savedWords.forEach(w => {
+      if (w?.word && !excludeWords.includes(w.word)) {
+        excludeWords.push(w.word);
       }
-    } catch (err) {
-      console.log("Gemini refresh request failed, selecting local seed word of difficulty:", difficulty);
-      // Filter local seed words matching difficulty & excluding already shown words
-      const excludeSet = [currentWord?.word?.toLowerCase()].filter(Boolean) as string[];
-      savedWords.forEach(w => {
-        if (w?.word) excludeSet.push(w.word.toLowerCase());
-      });
+    });
 
-      const matching = SEED_WORDS.filter(w => w.difficulty === difficulty && !excludeSet.includes(w.word.toLowerCase()));
-      const pool = matching.length > 0 ? matching : SEED_WORDS.filter(w => w.difficulty === difficulty);
-      const finalPool = pool.length > 0 ? pool : SEED_WORDS;
-      const idx = Math.floor(Math.random() * finalPool.length);
-      const chosen = finalPool[idx];
-      setCurrentWord(chosen);
-      showToast(`Offline Mode: Loaded "${chosen.word}" from offline memory.`);
+    try {
+      console.log(`[Frontend Generate] Requesting client-side direct word generation for difficulty: "${difficulty}"`);
+      const wordData = await generateWordDirect(difficulty, excludeWords);
+      if (wordData && wordData.word) {
+        setCurrentWord(wordData);
+        showToast(`Gemini successfully generated: ${wordData.word}!`);
+      } else {
+        throw new Error("Invalid structure returned from client-side direct generation");
+      }
+    } catch (err: any) {
+      console.warn("[Frontend Generate] Direct SDK call failed, trying backup API route:", err.message || err);
+      try {
+        const res = await fetch("/api/word/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ difficulty, excludeWords })
+        });
+        const data = await res.json();
+        if (data.success && data.word) {
+          setCurrentWord(data.word);
+          if (data.isFallback) {
+            showToast(`Offline Cache Word: ${data.word.word}`);
+          } else {
+            showToast(`Generated: ${data.word.word}!`);
+          }
+        } else {
+          throw new Error("Failed success flag from server");
+        }
+      } catch (backupErr) {
+        console.log("Both direct and backend generator failed, selecting local seed word of difficulty:", difficulty);
+        // Filter local seed words matching difficulty & excluding already shown words
+        const excludeSet = [currentWord?.word?.toLowerCase()].filter(Boolean) as string[];
+        savedWords.forEach(w => {
+          if (w?.word) excludeSet.push(w.word.toLowerCase());
+        });
+
+        const matching = SEED_WORDS.filter(w => w.difficulty === difficulty && !excludeSet.includes(w.word.toLowerCase()));
+        const pool = matching.length > 0 ? matching : SEED_WORDS.filter(w => w.difficulty === difficulty);
+        const finalPool = pool.length > 0 ? pool : SEED_WORDS;
+        const idx = Math.floor(Math.random() * finalPool.length);
+        const chosen = finalPool[idx];
+        setCurrentWord(chosen);
+        showToast(`Offline Mode: Loaded "${chosen.word}" from offline memory.`);
+      }
     } finally {
       setIsLoadingNewWord(false);
     }
   };
 
-  // Search Word dynamically calling Gemini AI on server
+  // Search Word dynamically calling Gemini AI on client
   const handleSearchWord = async (wordQuery: string) => {
     setIsLoadingNewWord(true);
     setSearchFeedback(null);
     const lowercaseQuery = wordQuery.trim().toLowerCase();
+
+    // 1. Check if word exists in local static list (SEED_WORDS)
+    const found = SEED_WORDS.find(w => w.word.toLowerCase() === lowercaseQuery);
+    if (found) {
+      setCurrentWord(found);
+      showToast(`Loaded offline word: ${found.word}`);
+      setIsLoadingNewWord(false);
+      return;
+    }
+
     try {
-      const res = await fetch("/api/word/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wordQuery })
-      });
-      const data = await res.json();
-      if (data.success && data.word) {
-        setCurrentWord(data.word);
-        if (data.isOffline) {
-          showToast(`Offline search result: ${data.word.word}`);
-        } else {
-          showToast(`Gemini retrieved word details for: ${data.word.word}`);
-        }
-      } else if (data.isInvalidWord) {
+      console.log(`[Frontend Search] Querying Gemini client directly for: "${wordQuery}"`);
+      const data = await searchWordDirect(wordQuery);
+      
+      if (data.isInvalidWord) {
         setSearchFeedback({
           error: data.message || `No valid English word found for "${wordQuery}".`,
-          suggestion: data.suggestion || undefined,
           searchedQuery: wordQuery
         });
         showToast("Unrecognized English word.");
+      } else if (data && data.word) {
+        setCurrentWord(data);
+        showToast(`Gemini successfully defined: ${data.word}!`);
       } else {
-        throw new Error("Word search API failed on server");
+        throw new Error("Invalid structure returned from Gemini client-side");
       }
-    } catch (err) {
-      console.log("Server search failed or client is offline. Looking up in local offline database for:", lowercaseQuery);
-      // Let's search inside local SEED_WORDS
-      const found = SEED_WORDS.find(w => w.word.toLowerCase() === lowercaseQuery);
-      if (found) {
-        setCurrentWord(found);
-        showToast(`Offline cache hit: Located "${found.word}" in local memory!`);
-      } else {
+    } catch (err: any) {
+      console.warn("[Frontend Search] Direct Gemini SDK call failed, trying backup API route:", err.message || err);
+      try {
+        // Fallback to Express backend /api server path if available
+        const res = await fetch("/api/word/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wordQuery })
+        });
+        const data = await res.json();
+        if (data.success && data.word) {
+          setCurrentWord(data.word);
+          showToast(`Retrieved word details for: ${data.word.word}`);
+        } else {
+          throw new Error("Internal server/offline lookup failed");
+        }
+      } catch (backupErr) {
+        console.error("[Frontend Search] Primary & secondary gateways both failed:", backupErr);
         setSearchFeedback({
-          error: `We could not find any offline or online records for "${wordQuery}". Please check your spelling or search for another vocabulary word.`,
+          error: `We could not configure or reach Gemini to define "${wordQuery}". Please check your internet connection or declare your VITE_GEMINI_API_KEY.`,
           searchedQuery: wordQuery
         });
         showToast("Word not found.");
