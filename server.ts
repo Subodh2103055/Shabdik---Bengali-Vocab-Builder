@@ -416,12 +416,11 @@ function saveSyncDB() {
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
-  // Middleware
-  app.use(express.json());
+// Middleware
+app.use(express.json());
 
   // API Endpoints
   
@@ -969,9 +968,10 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
     });
   }
 
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Express custom server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+export default app;
