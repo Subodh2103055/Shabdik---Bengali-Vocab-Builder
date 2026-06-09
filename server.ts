@@ -499,7 +499,7 @@ ${excludePrompt ? excludePrompt + "\n" : ""}3. Provide its accurate phonetic tra
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           temperature: 1.1,
@@ -641,7 +641,7 @@ However, if it is completely non-existent, random letter mashed gibberish (like 
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -838,7 +838,7 @@ In the "notes" property, provide concise, engaging grammatical annotation, bulle
 Strictly adhere to the response schema and output valid JSON. Do not wrap the JSON output in markdown blocks.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
