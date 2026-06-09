@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { OFFLINE_DICTIONARY } from "./src/data/offlineDictionary";
@@ -264,110 +265,47 @@ async function fetchEnglishDictionaryWord(word: string) {
 // Dynamically compile a vocabulary analysis on-the-fly using Dictionary & Google Translate APIs
 async function getDynamicFallbackWord(cleanWord: string) {
   const dictData = await fetchEnglishDictionaryWord(cleanWord);
-  
-  // If the dictionary API returned 404 (or failed), check if Google Translate is able to translate it.
-  if (!dictData || (dictData && 'isNotFound' in dictData)) {
-    console.log(`[Dynamic API Validator] Checking if "${cleanWord}" is translatable by Google Translate...`);
+  if (dictData && 'isNotFound' in dictData) {
+    return { isInvalidWord: true };
+  }
+  if (dictData) {
     try {
-      const googleTranslation = await fetchTranslation(cleanWord, "en", "bn");
-      const isTranslated = googleTranslation && googleTranslation.toLowerCase().trim() !== cleanWord.toLowerCase().trim();
-      
-      if (!isTranslated) {
-        // Double check: if it's the exact same string, it's probably gibberish.
-        return { isInvalidWord: true };
-      }
-      
-      // Since it translated successfully, this is a valid English word! Let's construct a beautiful dictionary entry.
-      // Guess part of speech based on ending
-      let partOfSpeech = "noun";
-      if (cleanWord.endsWith("ly")) partOfSpeech = "adverb";
-      else if (cleanWord.endsWith("ous") || cleanWord.endsWith("ful") || cleanWord.endsWith("able") || cleanWord.endsWith("ive")) partOfSpeech = "adjective";
-      else if (cleanWord.endsWith("ate") || cleanWord.endsWith("ize") || cleanWord.endsWith("ify")) partOfSpeech = "verb";
-      
-      // IPA guess or placeholder
-      const ipa = `/${cleanWord.toLowerCase()}/`;
-
-      // Formulate English and Bengali definitions dynamically
-      let definition = `The word "${cleanWord}" is a recognized vocabulary term.`;
-      let definitionBengali = `শব্দ "${cleanWord}" এর অনূদিত অর্থ হলো: "${googleTranslation}"।`;
-      let exampleSentence = `The application of "${cleanWord}" serves as a useful addition in educational contexts.`;
-      let exampleSentenceBengali = ` can be successfully understood as part of bilingual vocabulary study.`;
-
-      // Try translating the definition and example if possible, but keep fallback
-      try {
-        const trDef = await fetchTranslation(definition, "en", "bn");
-        if (trDef !== definition) definitionBengali = trDef;
-      } catch (e) { /* ignore */ }
-      
-      try {
-        const trExample = await fetchTranslation(`Using "${cleanWord}" in standard English conversations helps in vocabulary mastery.`, "en", "bn");
-        exampleSentence = `Using "${cleanWord}" in standard English conversations helps in vocabulary mastery.`;
-        exampleSentenceBengali = trExample;
-      } catch (e) { /* ignore */ }
-      
+      console.log(`[Dynamic API Fallback] Successfully fetched dictionary data for "${cleanWord}". Translating fields...`);
+      const [bengaliMeaning, definitionBengali, exampleSentenceBengali] = await Promise.all([
+        fetchTranslation(dictData.word, "en", "bn"),
+        fetchTranslation(dictData.definition, "en", "bn"),
+        fetchTranslation(dictData.exampleSentence, "en", "bn")
+      ]);
       return {
-        word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
-        ipa,
-        bengaliMeaning: googleTranslation,
-        definition,
+        word: dictData.word,
+        ipa: dictData.ipa,
+        bengaliMeaning,
+        definition: dictData.definition,
         definitionBengali,
-        exampleSentence,
+        exampleSentence: dictData.exampleSentence,
         exampleSentenceBengali,
-        synonyms: ["vocabulary", "meaning", "expression", "concept"],
+        synonyms: dictData.synonyms,
         difficulty: "intermediate",
-        partOfSpeech
+        partOfSpeech: dictData.partOfSpeech
       };
-    } catch (err) {
-      console.error("[Dynamic API Validator Error] Google Translate validation failed:", err);
-      return { isInvalidWord: true };
+    } catch (e) {
+      console.error(`[Dynamic Translation Error] Failed to translate dictionary fields for "${cleanWord}":`, e);
     }
   }
 
-  // If we have dictData, translate individual fields with robust individual try-catch blocks using inline defaults
-  let bengaliMeaning = dictData.word;
-  let definitionBengali = dictData.definition;
-  let exampleSentenceBengali = dictData.exampleSentence;
-
-  console.log(`[Dynamic API Fallback] Successfully fetched dictionary data for "${cleanWord}". Translating fields...`);
-  
-  try {
-    const trWord = await fetchTranslation(dictData.word, "en", "bn");
-    if (trWord && trWord !== dictData.word) {
-      bengaliMeaning = trWord;
-    }
-  } catch (e) {
-    console.warn(`Failed to translate word "${dictData.word}"`, e);
-  }
-
-  try {
-    const trDef = await fetchTranslation(dictData.definition, "en", "bn");
-    if (trDef && trDef !== dictData.definition) {
-      definitionBengali = trDef;
-    }
-  } catch (e) {
-    console.warn(`Failed to translate definition`, e);
-  }
-
-  try {
-    const trExample = await fetchTranslation(dictData.exampleSentence, "en", "bn");
-    if (trExample && trExample !== dictData.exampleSentence) {
-      exampleSentenceBengali = trExample;
-    }
-  } catch (e) {
-    console.warn(`Failed to translate example sentence`, e);
-  }
-
+  // Ultimate fallback if both English dictionary and Google Translation fail or are unreachable
+  const singleMeaning = await fetchTranslation(cleanWord, "en", "bn");
   return {
-    word: dictData.word,
-    ipa: dictData.ipa,
-    bengaliMeaning,
-    definition: dictData.definition,
-    definitionBengali,
-    exampleSentence: dictData.exampleSentence,
-    exampleSentenceBengali,
-    synonyms: dictData.synonyms,
+    word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
+    ipa: `/${cleanWord.toLowerCase()}/`,
+    bengaliMeaning: singleMeaning || "অফলাইন অনুসন্ধান",
+    definition: `We couldn't fetch a detailed live analysis for "${cleanWord}" right now due to a network connection delay.`,
+    definitionBengali: `সাময়িক সংযোগ বিলম্বের বাতিরেক "${cleanWord}" শব্দটির লাইভ ডিকশনারি ফলাফল পাওয়া যায়নি।`,
+    exampleSentence: `You searched for "${cleanWord}". Simply refresh or click Search again to fetch fresh live results.`,
+    exampleSentenceBengali: `আপনি "${cleanWord}" অনুসন্ধান করেছেন। লাইভ ডেটা লোড করার জন্য আবার সার্চ এ ক্লিক করুন।`,
+    synonyms: ["vocabulary", "term", "word", "expression"],
     difficulty: "intermediate",
-    partOfSpeech: dictData.partOfSpeech
+    partOfSpeech: "noun"
   };
 }
 
@@ -415,52 +353,147 @@ function saveSyncDB() {
   }
 }
 
-export const app = express();
-const PORT = 3000;
+// High-performance search result persistent cache to make subsequent searches of any word sub-millisecond
+const SEARCH_CACHE_FILE_PATH = path.join(process.cwd(), "search-cache.json");
+let searchCache: Record<string, any> = {};
 
-// Middleware
-app.use(express.json());
-
-// Request & Response Logging Middleware for debugging
-app.use((req, res, next) => {
-  const logMsg = `[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}\n`;
-  try {
-    fs.appendFileSync(path.join(process.cwd(), "server_request_logs.txt"), logMsg);
-  } catch (e) {}
-  console.log(logMsg);
-  
-  const oldSend = res.send;
-  res.send = function(body) {
-    const resMsg = `[${new Date().toISOString()}] Response for ${req.method} ${req.url} - Status: ${res.statusCode} - Body: ${typeof body === 'string' ? body.slice(0, 300) : 'binary/buffer'}\n`;
-    try {
-      fs.appendFileSync(path.join(process.cwd(), "server_request_logs.txt"), resMsg);
-    } catch (e) {}
-    console.log(resMsg);
-    return oldSend.apply(res, arguments as any);
-  };
-  next();
-});
-
-// Normalise request URLs on Vercel so Express routing matches perfectly
-if (process.env.VERCEL) {
-  app.use((req, res, next) => {
-    // Determine the original full request URL path
-    let targetUrl = req.url || "/";
-    if (req.originalUrl) {
-      targetUrl = req.originalUrl;
-    }
-    
-    // Clean up double-slashes or query param shifts
-    if (!targetUrl.startsWith("/api")) {
-      targetUrl = "/api" + (targetUrl.startsWith("/") ? targetUrl : "/" + targetUrl);
-    }
-    
-    req.url = targetUrl;
-    next();
-  });
+try {
+  if (fs.existsSync(SEARCH_CACHE_FILE_PATH)) {
+    const raw = fs.readFileSync(SEARCH_CACHE_FILE_PATH, "utf-8");
+    searchCache = JSON.parse(raw);
+    console.log(`[Search Persistent Cache] Successfully loaded ${Object.keys(searchCache).length} cached word definitions from disk.`);
+  }
+} catch (e) {
+  console.error("[Search Persistent Cache] Initialization warning:", e);
 }
 
-// API Endpoints
+function saveSearchCache() {
+  try {
+    fs.writeFileSync(SEARCH_CACHE_FILE_PATH, JSON.stringify(searchCache, null, 2), "utf-8");
+  } catch (e) {
+    console.error("[Search Persistent Cache] Failed to write cache to disk:", e);
+  }
+}
+
+// Background buffer storage to make Gemini word generation 100% instant (0ms!)
+const GENERATED_WORD_BUFFER: Record<string, any[]> = {
+  basic: [],
+  intermediate: [],
+  advanced: [],
+  ielts: [],
+  gre: []
+};
+
+const activeBufferWordsSet = new Set<string>();
+const replenishingFlags: Record<string, boolean> = {
+  basic: false,
+  intermediate: false,
+  advanced: false,
+  ielts: false,
+  gre: false
+};
+
+// Asynchronously pre-generates words in the background so that the next click is always instant (0ms!)
+async function replenishBuffer(difficulty: string) {
+  const client = getGeminiClient();
+  if (!client) return;
+
+  // We keep at most 3 words in the buffer per difficulty
+  if (GENERATED_WORD_BUFFER[difficulty] && GENERATED_WORD_BUFFER[difficulty].length >= 3) {
+    return;
+  }
+
+  if (replenishingFlags[difficulty]) {
+    return;
+  }
+  replenishingFlags[difficulty] = true;
+
+  try {
+    console.log(`[Background Buffer] Generating pre-heated word for difficulty "${difficulty}" in the background...`);
+    const difficultyPrompt = difficulty === "basic" 
+      ? "extremely simple, everyday words suitable for vocabulary beginners" 
+      : difficulty === "advanced" 
+        ? "uncommon, intellectual, or academic vocabulary words" 
+        : difficulty === "ielts"
+          ? "academic and high-yield words frequently appearing on IELTS exams like analyze, coherent, fluctuate, versatile, consolidate"
+          : difficulty === "gre"
+            ? "highly prestigious, scholarly, or advanced GRE words like aberration, capricious, epistemic, anachronism, loquacious"
+            : "common yet highly expressive intermediate level words";
+
+    const excludeWords = Array.from(activeBufferWordsSet);
+    const excludePrompt = excludeWords.length > 0
+      ? `3. Crucially, the word MUST NOT be any of these excluded words: ${excludeWords.join(', ')}.`
+      : "";
+
+    const prompt = `Generate an interesting, unique English word based on these guidelines:
+1. Difficulty level: ${difficulty} (${difficultyPrompt}).
+2. It MUST be a single genuine English word. Avoid trivial terms like "cat" or "house", choose highly expressive words.
+${excludePrompt ? excludePrompt + "\n" : ""}3. Provide its accurate phonetic transcription (IPA format).
+4. Provide its Bengali translation (simple, precise, and native).
+5. Provide a short definition in English.
+6. Provide a short Bengali description of the definition.
+7. Return a sample sentence showing the word beautifully used in real-life standard context.
+8. Translate this sample sentence accurately into Bengali.
+9. Suggest up to 4 accurate synonyms for this word.
+10. Specify its part of speech.
+
+Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
+
+    const response = await client.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 1.15,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            word: { type: Type.STRING },
+            ipa: { type: Type.STRING, description: "IPA format phonetic guides, e.g. /əˈstʌn.ɪʃ/" },
+            bengaliMeaning: { type: Type.STRING, description: "Bengali equivalent meaning/translation, e.g. বিস্মিত করা, চমকে দেওয়া" },
+            definition: { type: Type.STRING, description: "Detailed english explanation" },
+            definitionBengali: { type: Type.STRING, description: "Simple Bengali definition" },
+            exampleSentence: { type: Type.STRING, description: "Sample English sentence using the word" },
+            exampleSentenceBengali: { type: Type.STRING, description: "Bengali translation of sentence" },
+            synonyms: { type: Type.ARRAY, items: { type: Type.STRING } },
+            difficulty: { type: Type.STRING, enum: ["basic", "intermediate", "advanced", "ielts", "gre"] },
+            partOfSpeech: { type: Type.STRING, description: "noun, verb, adjective, adverb, etc." }
+          },
+          required: ["word", "ipa", "bengaliMeaning", "definition", "definitionBengali", "exampleSentence", "exampleSentenceBengali", "synonyms", "difficulty", "partOfSpeech"]
+        }
+      }
+    });
+
+    const text = response.text;
+    if (text) {
+      const generatedWord = JSON.parse(text);
+      if (generatedWord && generatedWord.word) {
+        const wKey = generatedWord.word.toLowerCase();
+        if (!activeBufferWordsSet.has(wKey)) {
+          GENERATED_WORD_BUFFER[difficulty].push(generatedWord);
+          activeBufferWordsSet.add(wKey);
+          console.log(`[Background Buffer] Successfully buffered "${generatedWord.word}" for difficulty "${difficulty}". Buffer size: ${GENERATED_WORD_BUFFER[difficulty].length}`);
+        }
+      }
+    }
+  } catch (error: any) {
+    console.error(`[Background Buffer Error] Could not replenish buffer for "${difficulty}":`, error.message);
+  } finally {
+    replenishingFlags[difficulty] = false;
+    if (GENERATED_WORD_BUFFER[difficulty].length < 2) {
+      setTimeout(() => replenishBuffer(difficulty), 1500);
+    }
+  }
+}
+
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
+
+  // Middleware
+  app.use(express.json());
+
+  // API Endpoints
   
   // 1. Get Daily Deterministic Word
   app.get("/api/word/daily", (req, res) => {
@@ -475,15 +508,44 @@ if (process.env.VERCEL) {
     });
   });
 
-  // 2. Generate/Refresh brand new word via Gemini
+  // 2. Generate/Refresh brand new word via Gemini (instant serving from background pre-heated buffers)
   app.post("/api/word/generate", async (req, res) => {
     const difficulty = req.body.difficulty || "intermediate";
     const excludeWords = req.body.excludeWords || [];
+
+    // Try to serve from pre-generated queue first (Instant, 0ms!)
+    if (GENERATED_WORD_BUFFER[difficulty] && GENERATED_WORD_BUFFER[difficulty].length > 0) {
+      const normalizedExclude = excludeWords.map((w: string) => w.toLowerCase());
+      let chosenIdx = -1;
+      for (let i = 0; i < GENERATED_WORD_BUFFER[difficulty].length; i++) {
+        const bufferedWord = GENERATED_WORD_BUFFER[difficulty][i].word.toLowerCase();
+        if (!normalizedExclude.includes(bufferedWord)) {
+          chosenIdx = i;
+          break;
+        }
+      }
+
+      if (chosenIdx !== -1) {
+        const [chosenWord] = GENERATED_WORD_BUFFER[difficulty].splice(chosenIdx, 1);
+        console.log(`[Instant Buffer Hit] Serving buffered word "${chosenWord.word}" for difficulty "${difficulty}". Remaining in buffer: ${GENERATED_WORD_BUFFER[difficulty].length}`);
+        
+        // Trigger background replenish
+        setTimeout(() => replenishBuffer(difficulty), 50);
+
+        return res.json({
+          success: true,
+          word: chosenWord,
+          isFallback: false,
+          isBuffered: true
+        });
+      }
+    }
+
+    // Buffer is empty (or contains only excluded words). Proceed with standard generation
     const client = getGeminiClient();
 
     if (!client) {
       console.log(`No Gemini API key detected. Selecting random seed word of difficulty ${difficulty} as fallback. Exclude count: ${excludeWords.length}`);
-      // Key absent: Fallback deterministically/randomly from other local words matching difficulty
       const normalizedExclude = excludeWords.map((w: string) => w.toLowerCase());
       const matching = LOCAL_WORDS.filter(w => w.difficulty === difficulty && !normalizedExclude.includes(w.word.toLowerCase()));
       const pool = matching.length > 0 ? matching : LOCAL_WORDS.filter(w => w.difficulty === difficulty);
@@ -528,7 +590,7 @@ ${excludePrompt ? excludePrompt + "\n" : ""}3. Provide its accurate phonetic tra
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         contents: prompt,
         config: {
           temperature: 1.1,
@@ -558,6 +620,10 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
       }
 
       const generatedWord = JSON.parse(text);
+      
+      // Since buffer is empty, asynchronously schedule replenish to pre-fill it for NEXT clicks
+      setTimeout(() => replenishBuffer(difficulty), 50);
+
       res.json({
         success: true,
         word: generatedWord,
@@ -571,6 +637,10 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
       const finalPool = pool.length > 0 ? pool : LOCAL_WORDS;
       const idx = Math.floor(Math.random() * finalPool.length);
       const chosen = finalPool[idx];
+
+      // Schedule buffer replenish anyway
+      setTimeout(() => replenishBuffer(difficulty), 50);
+
       res.json({
         success: true,
         word: chosen,
@@ -581,7 +651,7 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
     }
   });
 
-  // 2.5 Word exact Search via Gemini
+  // 2.5 Word exact Search via Gemini (highly optimized with fast paths and persistent cache of searched words)
   app.post("/api/word/search", async (req, res) => {
     const { wordQuery } = req.body;
     if (!wordQuery || typeof wordQuery !== "string" || !wordQuery.trim()) {
@@ -614,50 +684,64 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
       });
     }
 
-    const client = getGeminiClient();
+    // 3. High-Speed Persistent Cache Lookups (sub-millisecond repeat-definition retrieval)
+    if (searchCache[lcWord]) {
+      console.log(`[Instant Persistent Cache Hit] Found "${cleanWord}" in persistent search cache.`);
+      return res.json({
+        success: true,
+        word: searchCache[lcWord],
+        isOffline: false,
+        message: "Found word instantly in recent search history!"
+      });
+    }
 
-    if (!client) {
-      console.log(`[Offline Search Fallback] No Gemini API Key. Trying keyless dictionary & translate fallback for: ${cleanWord}`);
+    // 4. Fast Path Live Search via Free Dictionary API and parallel Google Translation
+    try {
+      console.log(`[Search Fast Path] Launching high-speed Dictionary & Translate parallel lookup for: "${cleanWord}"`);
+      const dynamicFallback = await getDynamicFallbackWord(cleanWord);
       
-      try {
-        const dynamicFallback = await getDynamicFallbackWord(cleanWord);
-        if (dynamicFallback && 'isInvalidWord' in dynamicFallback) {
-          return res.json({
-            success: false,
-            isInvalidWord: true,
-            message: `"${cleanWord}" is not recognized as a valid English word. Please check your spelling and try again.`,
-            suggestion: null
-          });
-        }
+      if (dynamicFallback && !('isInvalidWord' in dynamicFallback) && dynamicFallback.word) {
+        console.log(`[Search Fast Path Hit] Successfully resolved "${cleanWord}" via Dictionary & Translate in milliseconds.`);
+        // Save to persistent cache so we never do lookups for this word again!
+        searchCache[lcWord] = dynamicFallback;
+        saveSearchCache();
+
         return res.json({
           success: true,
           word: dynamicFallback,
-          isOffline: true,
-          message: "No Gemini key detected. Loaded dynamic fallback successfully!"
-        });
-      } catch (fallbackErr) {
-        console.error("Dynamic lookup failed without key, showing simulated demo:", fallbackErr);
-        // If everything fails, generate a sophisticated simulated fallback
-        const simulatedWord = {
-          word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1),
-          ipa: `/${cleanWord.toLowerCase()}/`,
-          bengaliMeaning: "সন্ধানকৃত শব্দ (Simulated offline)",
-          definition: `Fallback description for "${cleanWord}". Please set your Gemini API key in Settings -> Secrets for live translations of any word!`,
-          definitionBengali: `"${cleanWord}" এর জন্য অফলাইন ডেমো ব্যাখ্যা। সম্পূর্ণ ফিচারের জন্য অনুগ্রহ করে আপনার Gemini API কি যোগ করুন।`,
-          exampleSentence: `We can read and learn about the word "${cleanWord}" once API key is connected.`,
-          exampleSentenceBengali: `এপিআই কি সংযুক্ত হয়ে গেলে আমরা "${cleanWord}" শব্দটি সম্পর্কে বিস্তারিত পড়তে ও শিখতে পারব।`,
-          synonyms: ["example", "demo", "sample", "practice"],
-          difficulty: "intermediate",
-          partOfSpeech: "noun"
-        };
-
-        return res.json({
-          success: true,
-          word: simulatedWord,
-          isOffline: true,
-          message: "Offline Simulator Mode: (Set Gemini API Key inside Settings -> Secrets for live accurate dictionary fetch!)"
+          isOffline: false,
+          message: "Located and translated instantly!"
         });
       }
+    } catch (fastPathErr: any) {
+      console.warn(`[Search Fast Path Failure] Non-blocking fast path lookup failed for "${cleanWord}". Trying full Gemini analysis... ${fastPathErr.message}`);
+    }
+
+    // 5. In-depth Live Search via Gemini (Runs only if translation/dictionary misses OR spelling needs correction)
+    const client = getGeminiClient();
+
+    if (!client) {
+      console.log(`[Offline Search Fallback] No Gemini API Key. Word is missing in standard dictionary APIs too.`);
+      
+      const simulatedWord = {
+        word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
+        ipa: `/${cleanWord.toLowerCase()}/`,
+        bengaliMeaning: "সন্ধানকৃত শব্দ (Simulated offline)",
+        definition: `Fallback description for "${cleanWord}". Please set your Gemini API key in Settings -> Secrets for live translations of any word!`,
+        definitionBengali: `"${cleanWord}" এর জন্য অফলাইন ডেমো ব্যাখ্যা। সম্পূর্ণ ফিটারের জন্য অনুগ্রহ করে আপনার Gemini API কি যোগ করুন।`,
+        exampleSentence: `We can read and learn about the word "${cleanWord}" once API key is connected.`,
+        exampleSentenceBengali: `এপিআই কি সংযুক্ত হয়ে গেলে আমরা "${cleanWord}" শব্দটি সম্পর্কে বিস্তারিত পড়তে ও শিখতে পারব।`,
+        synonyms: ["example", "demo", "sample", "practice"],
+        difficulty: "intermediate",
+        partOfSpeech: "noun"
+      };
+
+      return res.json({
+        success: true,
+        word: simulatedWord,
+        isOffline: true,
+        message: "Offline Simulator Mode: (Set Gemini API Key inside Settings -> Secrets for live accurate dictionary fetch!)"
+      });
     }
 
     try {
@@ -670,7 +754,7 @@ However, if it is completely non-existent, random letter mashed gibberish (like 
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -710,6 +794,10 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
         });
       }
 
+      // Save to cache so subsequent searches are instant
+      searchCache[lcWord] = generatedWord;
+      saveSearchCache();
+
       res.json({
         success: true,
         word: generatedWord,
@@ -728,6 +816,11 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
             suggestion: null
           });
         }
+        
+        // Save to cache
+        searchCache[lcWord] = dynamicFallback;
+        saveSearchCache();
+
         return res.json({
           success: true,
           word: dynamicFallback,
@@ -749,7 +842,6 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
           friendlyErrorBengali = `সাময়িক সংযোগ বিলম্বের বাতিরেক "${cleanWord}" শব্দটির লাইভ ডিকশনারি ফলাফল পাওয়া যায়নি। অনুগ্রহ করে কয়েক সেকেন্ড পর আবার চেষ্টা করুন!`;
         }
 
-        // Fallback response if everything failed
         const backupWord = {
           word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
           ipa: `/${cleanWord.toLowerCase()}/`,
@@ -867,7 +959,7 @@ In the "notes" property, provide concise, engaging grammatical annotation, bulle
 Strictly adhere to the response schema and output valid JSON. Do not wrap the JSON output in markdown blocks.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -969,51 +1061,57 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
     res.json({ success: true, data: stored.data, updatedAt: stored.updatedAt });
   });
 
-  // Active Vite Integration (Only when NOT running on Vercel)
-  if (!process.env.VERCEL) {
-    const distPath = path.join(process.cwd(), "dist");
-    const hasDist = fs.existsSync(distPath);
+  // Active Vite Integration
+  const distPath = path.join(process.cwd(), "dist");
+  const hasDist = fs.existsSync(distPath);
 
-    if (process.env.NODE_ENV !== "production" || !hasDist) {
-      console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
-      let viteDevServer: any = null;
-      const viteInitializationPromise = import("vite").then(({ createServer }) => {
-        return createServer({
-          server: { middlewareMode: true },
-          appType: "spa",
-        });
-      }).then(vite => {
-        viteDevServer = vite;
-        console.log(`[Vite] Dev server middleware initialized successfully!`);
-        return vite;
-      }).catch(err => {
-        console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
-      });
+  if (process.env.NODE_ENV !== "production" || !hasDist) {
+    console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
+    let viteDevServer: any = null;
+    const viteInitializationPromise = createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    }).then(vite => {
+      viteDevServer = vite;
+      console.log(`[Vite] Dev server middleware initialized successfully!`);
+      return vite;
+    }).catch(err => {
+      console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
+    });
 
-      app.use(async (req, res, next) => {
-        if (!viteDevServer) {
-          console.log(`[Server] Holdup: request "${req.url}" is waiting for Vite dev server initialization...`);
-          await viteInitializationPromise;
-        }
-        if (viteDevServer) {
-          viteDevServer.middlewares(req, res, next);
-        } else {
-          res.status(503).send("Vite Development Server is starting up. Please reload in a few seconds.");
-        }
-      });
-    } else {
-      console.log(`[Server] Starting in PRODUCTION mode (Serving static assets from ${distPath})`);
-      app.use(express.static(distPath));
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(distPath, "index.html"));
-      });
-    }
+    app.use(async (req, res, next) => {
+      if (!viteDevServer) {
+        console.log(`[Server] Holdup: request "${req.url}" is waiting for Vite dev server initialization...`);
+        await viteInitializationPromise;
+      }
+      if (viteDevServer) {
+        viteDevServer.middlewares(req, res, next);
+      } else {
+        res.status(503).send("Vite Development Server is starting up. Please reload in a few seconds.");
+      }
+    });
+  } else {
+    console.log(`[Server] Starting in PRODUCTION mode (Serving static assets from ${distPath})`);
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
 
-if (!process.env.VERCEL) {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Express custom server running on http://localhost:${PORT}`);
+    
+    // Warm up the background generation buffers for each difficulty level asynchronously
+    setTimeout(() => {
+      const difficulties = ["basic", "intermediate", "advanced", "ielts", "gre"];
+      console.log(`[Background Buffer] Initiating asynchronous background replenishment on boot for: ${difficulties.join(', ')}...`);
+      difficulties.forEach(diff => {
+        replenishBuffer(diff).catch(err => {
+          console.error(`[Background Buffer] Initial replenishment failed for "${diff}":`, err);
+        });
+      });
+    }, 1500);
   });
 }
 
-export default app;
+startServer();
