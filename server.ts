@@ -261,12 +261,58 @@ async function fetchEnglishDictionaryWord(word: string) {
   }
 }
 
-// Dynamically compile a vocabulary analysis on-the-fly using Dictionary & Google Translate APIs
+// Dynamically compile a vocabulary analysis on-the-fly using the backend Gemini client directly (so fallback routes directly to the AI model and never fails to synthesize highly authentic translations, definitions, and contextual examples)
 async function getDynamicFallbackWord(cleanWord: string) {
-  const dictData = await fetchEnglishDictionaryWord(cleanWord);
-  if (dictData && !('isNotFound' in dictData)) {
+  const client = getGeminiClient();
+  if (client) {
     try {
-      console.log(`[Dynamic API Fallback] Successfully fetched dictionary data for "${cleanWord}". Translating fields...`);
+      console.log(`[Dynamic AI Fallback] Generating authentic dictionary details directly via Gemini 3.5 for: "${cleanWord}"`);
+      const prompt = `Perform a brilliant, complete dictionary analysis for the exact English word: "${cleanWord}".
+Generate a beautifully structured response containing its phonetic spelling (IPA), Bengali meaning, definition, definition in simpler Bengali, a contextual example sentence, its native Bengali translation, synonyms, difficulty level ("basic", "intermediate", "advanced"), and part of speech ("noun", "verb", "adjective", "adverb", etc.).
+Always return a valid structure without any markdown wrappers.`;
+
+      const response = await client.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              word: { type: Type.STRING },
+              ipa: { type: Type.STRING },
+              bengaliMeaning: { type: Type.STRING },
+              definition: { type: Type.STRING },
+              definitionBengali: { type: Type.STRING },
+              exampleSentence: { type: Type.STRING },
+              exampleSentenceBengali: { type: Type.STRING },
+              synonyms: { type: Type.ARRAY, items: { type: Type.STRING } },
+              difficulty: { type: Type.STRING, enum: ["basic", "intermediate", "advanced"] },
+              partOfSpeech: { type: Type.STRING }
+            },
+            required: ["word", "ipa", "bengaliMeaning", "definition", "definitionBengali", "exampleSentence", "exampleSentenceBengali", "synonyms", "difficulty", "partOfSpeech"]
+          }
+        }
+      });
+
+      const text = response.text;
+      if (text) {
+        const parsed = JSON.parse(text);
+        if (parsed && parsed.word) {
+          return parsed;
+        }
+      }
+    } catch (geminiError: any) {
+      console.error(`[Dynamic AI Fallback Error] Gemini synthesis failed for "${cleanWord}":`, geminiError.message || geminiError);
+    }
+  }
+
+  // If Gemini client is unavailable (e.g. key has not been initialized or is failing),
+  // resort to the classic translation lookup to ensure the app continues to operate flawlessly.
+  console.log(`[Classic Fallback Gateway] Resorting to public lookup for: "${cleanWord}"`);
+  try {
+    const dictData = await fetchEnglishDictionaryWord(cleanWord);
+    if (dictData && !('isNotFound' in dictData)) {
       const [bengaliMeaning, definitionBengali, exampleSentenceBengali] = await Promise.all([
         fetchTranslation(dictData.word, "en", "bn"),
         fetchTranslation(dictData.definition, "en", "bn"),
@@ -284,14 +330,12 @@ async function getDynamicFallbackWord(cleanWord: string) {
         difficulty: "intermediate",
         partOfSpeech: dictData.partOfSpeech
       };
-    } catch (e) {
-      console.error(`[Dynamic Translation Error] Failed to translate dictionary fields for "${cleanWord}":`, e);
     }
+  } catch (err: any) {
+    console.error(`[Classic Fallback Error] public lookup failed for "${cleanWord}":`, err.message);
   }
 
-  // Ultimate fallback if the English dictionary API says 404/not found, failed, or is unreachable.
-  // We dynamically translate the query word so that we never fail to render a beautiful card.
-  console.log(`[Dynamic Fallback Translator] Resorting to live translation-based synthesis for: "${cleanWord}"`);
+  // Ultimate static synthesis fallback
   const singleMeaning = await fetchTranslation(cleanWord, "en", "bn");
   return {
     word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
@@ -311,8 +355,15 @@ async function getDynamicFallbackWord(cleanWord: string) {
 let aiClient: GoogleGenAI | null = null;
 
 function getGeminiClient(): GoogleGenAI | null {
-  // Directly and securely access process.env.GEMINI_API_KEY
-  const key = process.env.GEMINI_API_KEY;
+  // Directly and securely access process.env.GEMINI_API_KEY with quote/whitespace cleaning
+  let key = process.env.GEMINI_API_KEY?.trim() || "";
+  
+  if (key.startsWith('"') && key.endsWith('"')) {
+    key = key.slice(1, -1).trim();
+  }
+  if (key.startsWith("'") && key.endsWith("'")) {
+    key = key.slice(1, -1).trim();
+  }
   
   if (!key) {
     console.log("[Gemini Setup] No active GEMINI_API_KEY found in process.env. Entering local offline fallback mode smoothly.");
