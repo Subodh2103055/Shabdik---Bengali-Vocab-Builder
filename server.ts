@@ -312,19 +312,37 @@ async function getDynamicFallbackWord(cleanWord: string) {
 let aiClient: GoogleGenAI | null = null;
 
 function getGeminiClient(): GoogleGenAI | null {
+  // Directly and securely access process.env.GEMINI_API_KEY
   const key = process.env.GEMINI_API_KEY;
-  if (!key || key === "MY_GEMINI_API_KEY") {
+  
+  if (!key) {
+    console.log("[Gemini Setup] No active GEMINI_API_KEY found in process.env. Entering local offline fallback mode smoothly.");
     return null;
   }
+
+  // Bypass or warn if default local placeholder is somehow carried over to production
+  if (key === "MY_GEMINI_API_KEY") {
+    if (process.env.VERCEL) {
+      console.warn("[Gemini Setup] GEMINI_API_KEY is currently set to 'MY_GEMINI_API_KEY' on Vercel. Please specify your real key in Vercel's Environment Variables dashboard.");
+    }
+    return null;
+  }
+
   if (!aiClient) {
-    aiClient = new GoogleGenAI({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
+    try {
+      aiClient = new GoogleGenAI({
+        apiKey: key,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
         }
-      }
-    });
+      });
+      console.log("[Gemini Setup] Successfully initialized GoogleGenAI with the secure server-side API Key!");
+    } catch (err: any) {
+      console.error("[Gemini Setup] Error initializing active Gemini client:", err.message);
+      return null;
+    }
   }
   return aiClient;
 }
