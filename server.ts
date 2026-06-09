@@ -421,6 +421,26 @@ const PORT = 3000;
 // Middleware
 app.use(express.json());
 
+// Request & Response Logging Middleware for debugging
+app.use((req, res, next) => {
+  const logMsg = `[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}\n`;
+  try {
+    fs.appendFileSync(path.join(process.cwd(), "server_request_logs.txt"), logMsg);
+  } catch (e) {}
+  console.log(logMsg);
+  
+  const oldSend = res.send;
+  res.send = function(body) {
+    const resMsg = `[${new Date().toISOString()}] Response for ${req.method} ${req.url} - Status: ${res.statusCode} - Body: ${typeof body === 'string' ? body.slice(0, 300) : 'binary/buffer'}\n`;
+    try {
+      fs.appendFileSync(path.join(process.cwd(), "server_request_logs.txt"), resMsg);
+    } catch (e) {}
+    console.log(resMsg);
+    return oldSend.apply(res, arguments as any);
+  };
+  next();
+});
+
 // Normalise request URLs on Vercel so Express routing matches perfectly
 if (process.env.VERCEL) {
   app.use((req, res, next) => {
