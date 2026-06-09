@@ -424,9 +424,18 @@ app.use(express.json());
 // Normalise request URLs on Vercel so Express routing matches perfectly
 if (process.env.VERCEL) {
   app.use((req, res, next) => {
+    // Determine the original full request URL path
+    let targetUrl = req.url || "/";
     if (req.originalUrl) {
-      req.url = req.originalUrl;
+      targetUrl = req.originalUrl;
     }
+    
+    // Clean up double-slashes or query param shifts
+    if (!targetUrl.startsWith("/api")) {
+      targetUrl = "/api" + (targetUrl.startsWith("/") ? targetUrl : "/" + targetUrl);
+    }
+    
+    req.url = targetUrl;
     next();
   });
 }
@@ -981,7 +990,7 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
     }
   }
 
-if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+if (!process.env.VERCEL) {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Express custom server running on http://localhost:${PORT}`);
   });
