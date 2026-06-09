@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { OFFLINE_DICTIONARY } from "./src/data/offlineDictionary";
@@ -265,47 +264,110 @@ async function fetchEnglishDictionaryWord(word: string) {
 // Dynamically compile a vocabulary analysis on-the-fly using Dictionary & Google Translate APIs
 async function getDynamicFallbackWord(cleanWord: string) {
   const dictData = await fetchEnglishDictionaryWord(cleanWord);
-  if (dictData && 'isNotFound' in dictData) {
-    return { isInvalidWord: true };
-  }
-  if (dictData) {
+  
+  // If the dictionary API returned 404 (or failed), check if Google Translate is able to translate it.
+  if (!dictData || (dictData && 'isNotFound' in dictData)) {
+    console.log(`[Dynamic API Validator] Checking if "${cleanWord}" is translatable by Google Translate...`);
     try {
-      console.log(`[Dynamic API Fallback] Successfully fetched dictionary data for "${cleanWord}". Translating fields...`);
-      const [bengaliMeaning, definitionBengali, exampleSentenceBengali] = await Promise.all([
-        fetchTranslation(dictData.word, "en", "bn"),
-        fetchTranslation(dictData.definition, "en", "bn"),
-        fetchTranslation(dictData.exampleSentence, "en", "bn")
-      ]);
+      const googleTranslation = await fetchTranslation(cleanWord, "en", "bn");
+      const isTranslated = googleTranslation && googleTranslation.toLowerCase().trim() !== cleanWord.toLowerCase().trim();
+      
+      if (!isTranslated) {
+        // Double check: if it's the exact same string, it's probably gibberish.
+        return { isInvalidWord: true };
+      }
+      
+      // Since it translated successfully, this is a valid English word! Let's construct a beautiful dictionary entry.
+      // Guess part of speech based on ending
+      let partOfSpeech = "noun";
+      if (cleanWord.endsWith("ly")) partOfSpeech = "adverb";
+      else if (cleanWord.endsWith("ous") || cleanWord.endsWith("ful") || cleanWord.endsWith("able") || cleanWord.endsWith("ive")) partOfSpeech = "adjective";
+      else if (cleanWord.endsWith("ate") || cleanWord.endsWith("ize") || cleanWord.endsWith("ify")) partOfSpeech = "verb";
+      
+      // IPA guess or placeholder
+      const ipa = `/${cleanWord.toLowerCase()}/`;
+
+      // Formulate English and Bengali definitions dynamically
+      let definition = `The word "${cleanWord}" is a recognized vocabulary term.`;
+      let definitionBengali = `শব্দ "${cleanWord}" এর অনূদিত অর্থ হলো: "${googleTranslation}"।`;
+      let exampleSentence = `The application of "${cleanWord}" serves as a useful addition in educational contexts.`;
+      let exampleSentenceBengali = ` can be successfully understood as part of bilingual vocabulary study.`;
+
+      // Try translating the definition and example if possible, but keep fallback
+      try {
+        const trDef = await fetchTranslation(definition, "en", "bn");
+        if (trDef !== definition) definitionBengali = trDef;
+      } catch (e) { /* ignore */ }
+      
+      try {
+        const trExample = await fetchTranslation(`Using "${cleanWord}" in standard English conversations helps in vocabulary mastery.`, "en", "bn");
+        exampleSentence = `Using "${cleanWord}" in standard English conversations helps in vocabulary mastery.`;
+        exampleSentenceBengali = trExample;
+      } catch (e) { /* ignore */ }
+      
       return {
-        word: dictData.word,
-        ipa: dictData.ipa,
-        bengaliMeaning,
-        definition: dictData.definition,
+        word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
+        ipa,
+        bengaliMeaning: googleTranslation,
+        definition,
         definitionBengali,
-        exampleSentence: dictData.exampleSentence,
+        exampleSentence,
         exampleSentenceBengali,
-        synonyms: dictData.synonyms,
+        synonyms: ["vocabulary", "meaning", "expression", "concept"],
         difficulty: "intermediate",
-        partOfSpeech: dictData.partOfSpeech
+        partOfSpeech
       };
-    } catch (e) {
-      console.error(`[Dynamic Translation Error] Failed to translate dictionary fields for "${cleanWord}":`, e);
+    } catch (err) {
+      console.error("[Dynamic API Validator Error] Google Translate validation failed:", err);
+      return { isInvalidWord: true };
     }
   }
 
-  // Ultimate fallback if both English dictionary and Google Translation fail or are unreachable
-  const singleMeaning = await fetchTranslation(cleanWord, "en", "bn");
+  // If we have dictData, translate individual fields with robust individual try-catch blocks using inline defaults
+  let bengaliMeaning = dictData.word;
+  let definitionBengali = dictData.definition;
+  let exampleSentenceBengali = dictData.exampleSentence;
+
+  console.log(`[Dynamic API Fallback] Successfully fetched dictionary data for "${cleanWord}". Translating fields...`);
+  
+  try {
+    const trWord = await fetchTranslation(dictData.word, "en", "bn");
+    if (trWord && trWord !== dictData.word) {
+      bengaliMeaning = trWord;
+    }
+  } catch (e) {
+    console.warn(`Failed to translate word "${dictData.word}"`, e);
+  }
+
+  try {
+    const trDef = await fetchTranslation(dictData.definition, "en", "bn");
+    if (trDef && trDef !== dictData.definition) {
+      definitionBengali = trDef;
+    }
+  } catch (e) {
+    console.warn(`Failed to translate definition`, e);
+  }
+
+  try {
+    const trExample = await fetchTranslation(dictData.exampleSentence, "en", "bn");
+    if (trExample && trExample !== dictData.exampleSentence) {
+      exampleSentenceBengali = trExample;
+    }
+  } catch (e) {
+    console.warn(`Failed to translate example sentence`, e);
+  }
+
   return {
-    word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
-    ipa: `/${cleanWord.toLowerCase()}/`,
-    bengaliMeaning: singleMeaning || "অফলাইন অনুসন্ধান",
-    definition: `We couldn't fetch a detailed live analysis for "${cleanWord}" right now due to a network connection delay.`,
-    definitionBengali: `সাময়িক সংযোগ বিলম্বের বাতিরেক "${cleanWord}" শব্দটির লাইভ ডিকশনারি ফলাফল পাওয়া যায়নি।`,
-    exampleSentence: `You searched for "${cleanWord}". Simply refresh or click Search again to fetch fresh live results.`,
-    exampleSentenceBengali: `আপনি "${cleanWord}" অনুসন্ধান করেছেন। লাইভ ডেটা লোড করার জন্য আবার সার্চ এ ক্লিক করুন।`,
-    synonyms: ["vocabulary", "term", "word", "expression"],
+    word: dictData.word,
+    ipa: dictData.ipa,
+    bengaliMeaning,
+    definition: dictData.definition,
+    definitionBengali,
+    exampleSentence: dictData.exampleSentence,
+    exampleSentenceBengali,
+    synonyms: dictData.synonyms,
     difficulty: "intermediate",
-    partOfSpeech: "noun"
+    partOfSpeech: dictData.partOfSpeech
   };
 }
 
@@ -353,14 +415,52 @@ function saveSyncDB() {
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
-  // Middleware
-  app.use(express.json());
+// Middleware
+app.use(express.json());
 
-  // API Endpoints
+// Request & Response Logging Middleware for debugging
+app.use((req, res, next) => {
+  const logMsg = `[${new Date().toISOString()}] ${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}\n`;
+  try {
+    fs.appendFileSync(path.join(process.cwd(), "server_request_logs.txt"), logMsg);
+  } catch (e) {}
+  console.log(logMsg);
+  
+  const oldSend = res.send;
+  res.send = function(body) {
+    const resMsg = `[${new Date().toISOString()}] Response for ${req.method} ${req.url} - Status: ${res.statusCode} - Body: ${typeof body === 'string' ? body.slice(0, 300) : 'binary/buffer'}\n`;
+    try {
+      fs.appendFileSync(path.join(process.cwd(), "server_request_logs.txt"), resMsg);
+    } catch (e) {}
+    console.log(resMsg);
+    return oldSend.apply(res, arguments as any);
+  };
+  next();
+});
+
+// Normalise request URLs on Vercel so Express routing matches perfectly
+if (process.env.VERCEL) {
+  app.use((req, res, next) => {
+    // Determine the original full request URL path
+    let targetUrl = req.url || "/";
+    if (req.originalUrl) {
+      targetUrl = req.originalUrl;
+    }
+    
+    // Clean up double-slashes or query param shifts
+    if (!targetUrl.startsWith("/api")) {
+      targetUrl = "/api" + (targetUrl.startsWith("/") ? targetUrl : "/" + targetUrl);
+    }
+    
+    req.url = targetUrl;
+    next();
+  });
+}
+
+// API Endpoints
   
   // 1. Get Daily Deterministic Word
   app.get("/api/word/daily", (req, res) => {
@@ -428,7 +528,7 @@ ${excludePrompt ? excludePrompt + "\n" : ""}3. Provide its accurate phonetic tra
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           temperature: 1.1,
@@ -570,7 +670,7 @@ However, if it is completely non-existent, random letter mashed gibberish (like 
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -767,7 +867,7 @@ In the "notes" property, provide concise, engaging grammatical annotation, bulle
 Strictly adhere to the response schema and output valid JSON. Do not wrap the JSON output in markdown blocks.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -869,46 +969,51 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
     res.json({ success: true, data: stored.data, updatedAt: stored.updatedAt });
   });
 
-  // Active Vite Integration
-  const distPath = path.join(process.cwd(), "dist");
-  const hasDist = fs.existsSync(distPath);
+  // Active Vite Integration (Only when NOT running on Vercel)
+  if (!process.env.VERCEL) {
+    const distPath = path.join(process.cwd(), "dist");
+    const hasDist = fs.existsSync(distPath);
 
-  if (process.env.NODE_ENV !== "production" || !hasDist) {
-    console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
-    let viteDevServer: any = null;
-    const viteInitializationPromise = createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    }).then(vite => {
-      viteDevServer = vite;
-      console.log(`[Vite] Dev server middleware initialized successfully!`);
-      return vite;
-    }).catch(err => {
-      console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
-    });
+    if (process.env.NODE_ENV !== "production" || !hasDist) {
+      console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
+      let viteDevServer: any = null;
+      const viteInitializationPromise = import("vite").then(({ createServer }) => {
+        return createServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+      }).then(vite => {
+        viteDevServer = vite;
+        console.log(`[Vite] Dev server middleware initialized successfully!`);
+        return vite;
+      }).catch(err => {
+        console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
+      });
 
-    app.use(async (req, res, next) => {
-      if (!viteDevServer) {
-        console.log(`[Server] Holdup: request "${req.url}" is waiting for Vite dev server initialization...`);
-        await viteInitializationPromise;
-      }
-      if (viteDevServer) {
-        viteDevServer.middlewares(req, res, next);
-      } else {
-        res.status(503).send("Vite Development Server is starting up. Please reload in a few seconds.");
-      }
-    });
-  } else {
-    console.log(`[Server] Starting in PRODUCTION mode (Serving static assets from ${distPath})`);
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+      app.use(async (req, res, next) => {
+        if (!viteDevServer) {
+          console.log(`[Server] Holdup: request "${req.url}" is waiting for Vite dev server initialization...`);
+          await viteInitializationPromise;
+        }
+        if (viteDevServer) {
+          viteDevServer.middlewares(req, res, next);
+        } else {
+          res.status(503).send("Vite Development Server is starting up. Please reload in a few seconds.");
+        }
+      });
+    } else {
+      console.log(`[Server] Starting in PRODUCTION mode (Serving static assets from ${distPath})`);
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
   }
 
+if (!process.env.VERCEL) {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Express custom server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+export default app;
