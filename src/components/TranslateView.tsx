@@ -159,7 +159,7 @@ export default function TranslateView({
             }
             if (translated.trim()) {
               setTranslation(translated.trim());
-              setNotes("⚠️ **[ব্রাউজার সিঙ্ক মোড]** মূল সার্ভার সংযোগে সাময়িক বাধা সৃষ্টি হয়েছে (যেমন: Brave Shields বা Adblocker দ্বারা থার্ড-পার্টি কুকি ব্লক)। ব্রাউজার সরাসরি গুগল গেটওয়ে ব্যবহার করে অনুবাদটি সম্পন্ন করেছে।");
+              setNotes("");
               return;
             }
           }
@@ -170,15 +170,11 @@ export default function TranslateView({
 
       // Final fallback if direct connection is also failing
       const simulatedTrans = mode === 'en-to-bn' 
-        ? `[সংযোগ মোড] "${queryText}" এর অনুবাদের জন্য সার্ভারে পৌঁছানো যায়নি।` 
-        : `[Connection Warning] Could not reach server to translate: "${queryText}".`;
+        ? `"${queryText}" এর অনুবাদের জন্য সংযোগ স্থাপন করা যাচ্ছে না।` 
+        : `Could not connect to service to translate: "${queryText}".`;
       setTranslation(simulatedTrans);
       
-      setNotes(
-        "💡 **ব্রাউজার সংযোগ সংক্রান্ত গুরুত্বপূর্ণ সহযোগিতা নির্দেশিকা:**\n\n" +
-        "১. **ব্রাউজার ট্র্যাকিং ও শিল্ড (Brave Shields / Adblockers):** আপনার ব্রাউজার (যেমন Brave Browser, macOS Safari, অথবা Chrome Incognito) এআই স্টুডিওর প্রয়োজনীয় নিরাপত্তা ও অথরাইজেশন কুকিজ ব্লক করে রাখছে। অনুগ্রহ করে ব্রাউজার অ্যাড্রেস বারের পাশে সিংগা বা শিল্ড আইকনে ক্লিক করে **Shields OFF (শিল্ড বন্ধ)** করুন অথবা থার্ড-পার্টি কুকিজের অনুমতি দিন।\n\n" +
-        "২. **শেয়ারড লিংকে প্রবেশাধিকার ত্রুটি (403 Forbidden Error):** বন্ধুদের সাথে শেয়ার করার জন্য সরাসরি এই ডেভেলপমেন্ট লিংক পাঠালে নিরাপত্তা নীতির কারণে তারা প্রবেশ করতে পারবে না। অন্যদের সাথে শেয়ার করতে গুগল এআই স্টুডিও ইন্টারফেসের একদম উপরে ডানপাশের **Share** বা **Deploy to Cloud Run** অপশন ব্যবহার করুন।"
-      );
+      setNotes("");
     } finally {
       setIsLoading(false);
     }
