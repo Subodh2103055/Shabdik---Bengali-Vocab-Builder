@@ -421,6 +421,16 @@ const PORT = 3000;
 // Middleware
 app.use(express.json());
 
+// Normalise request URLs on Vercel so Express routing matches perfectly
+if (process.env.VERCEL) {
+  app.use((req, res, next) => {
+    if (req.originalUrl) {
+      req.url = req.originalUrl;
+    }
+    next();
+  });
+}
+
 // API Endpoints
   
   // 1. Get Daily Deterministic Word
