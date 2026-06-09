@@ -331,7 +331,9 @@ function getGeminiClient(): GoogleGenAI | null {
 
 // File-system based fallback storage for cross-device cloud sync sessions, so that
 // dev server restarts (due to code edits) or container restarts do not lose user tokens.
-const SYNC_FILE_PATH = path.join(process.cwd(), "sync-sessions.json");
+const SYNC_FILE_PATH = process.env.VERCEL
+  ? path.join("/tmp", "sync-sessions.json")
+  : path.join(process.cwd(), "sync-sessions.json");
 let syncDB: Record<string, any> = {};
 
 try {
@@ -353,7 +355,9 @@ function saveSyncDB() {
 }
 
 // High-performance search result persistent cache to make subsequent searches of any word sub-millisecond
-const SEARCH_CACHE_FILE_PATH = path.join(process.cwd(), "search-cache.json");
+const SEARCH_CACHE_FILE_PATH = process.env.VERCEL
+  ? path.join("/tmp", "search-cache.json")
+  : path.join(process.cwd(), "search-cache.json");
 let searchCache: Record<string, any> = {};
 
 try {
@@ -485,10 +489,10 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
+async function startServer() {
   // Middleware
   app.use(express.json());
 
@@ -1076,6 +1080,11 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   });
 
   // Active Vite Integration
+  if (process.env.VERCEL) {
+    console.log(`[Server] Serverless environment detected. Serving API endpoints from Vercel.`);
+    return;
+  }
+
   // Find dist directory robustly, ensuring index.html exists
   let distPath = path.join(process.cwd(), "dist");
   if (!fs.existsSync(path.join(distPath, "index.html"))) {
