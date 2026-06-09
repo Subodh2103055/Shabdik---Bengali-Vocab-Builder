@@ -264,10 +264,7 @@ async function fetchEnglishDictionaryWord(word: string) {
 // Dynamically compile a vocabulary analysis on-the-fly using Dictionary & Google Translate APIs
 async function getDynamicFallbackWord(cleanWord: string) {
   const dictData = await fetchEnglishDictionaryWord(cleanWord);
-  if (dictData && 'isNotFound' in dictData) {
-    return { isInvalidWord: true };
-  }
-  if (dictData) {
+  if (dictData && !('isNotFound' in dictData)) {
     try {
       console.log(`[Dynamic API Fallback] Successfully fetched dictionary data for "${cleanWord}". Translating fields...`);
       const [bengaliMeaning, definitionBengali, exampleSentenceBengali] = await Promise.all([
@@ -292,16 +289,18 @@ async function getDynamicFallbackWord(cleanWord: string) {
     }
   }
 
-  // Ultimate fallback if both English dictionary and Google Translation fail or are unreachable
+  // Ultimate fallback if the English dictionary API says 404/not found, failed, or is unreachable.
+  // We dynamically translate the query word so that we never fail to render a beautiful card.
+  console.log(`[Dynamic Fallback Translator] Resorting to live translation-based synthesis for: "${cleanWord}"`);
   const singleMeaning = await fetchTranslation(cleanWord, "en", "bn");
   return {
     word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
     ipa: `/${cleanWord.toLowerCase()}/`,
-    bengaliMeaning: singleMeaning || "অফলাইন অনুসন্ধান",
-    definition: `We couldn't fetch a detailed live analysis for "${cleanWord}" right now due to a network connection delay.`,
-    definitionBengali: `সাময়িক সংযোগ বিলম্বের বাতিরেক "${cleanWord}" শব্দটির লাইভ ডিকশনারি ফলাফল পাওয়া যায়নি।`,
-    exampleSentence: `You searched for "${cleanWord}". Simply refresh or click Search again to fetch fresh live results.`,
-    exampleSentenceBengali: `আপনি "${cleanWord}" অনুসন্ধান করেছেন। লাইভ ডেটা লোড করার জন্য আবার সার্চ এ ক্লিক করুন।`,
+    bengaliMeaning: singleMeaning || "সন্ধানকৃত শব্দ",
+    definition: `A vocabulary word queried in the dictionary system.`,
+    definitionBengali: `ডিকশনারি সিস্টেমে অনুসন্ধানকৃত একটি শব্দ।`,
+    exampleSentence: `Understanding the spelling, definition, and grammar contexts of "${cleanWord}".`,
+    exampleSentenceBengali: `"${cleanWord}" শব্দটির ব্যবহারিক প্রয়োগ এবং বাংলা বাক্য গঠন।`,
     synonyms: ["vocabulary", "term", "word", "expression"],
     difficulty: "intermediate",
     partOfSpeech: "noun"
@@ -716,57 +715,13 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
       });
     }
 
-    // 4. Fast Path Live Search via Free Dictionary API and parallel Google Translation
-    try {
-      console.log(`[Search Fast Path] Launching high-speed Dictionary & Translate parallel lookup for: "${cleanWord}"`);
-      const dynamicFallback = await getDynamicFallbackWord(cleanWord);
-      
-      if (dynamicFallback && !('isInvalidWord' in dynamicFallback) && dynamicFallback.word) {
-        console.log(`[Search Fast Path Hit] Successfully resolved "${cleanWord}" via Dictionary & Translate in milliseconds.`);
-        // Save to persistent cache so we never do lookups for this word again!
-        searchCache[lcWord] = dynamicFallback;
-        saveSearchCache();
-
-        return res.json({
-          success: true,
-          word: dynamicFallback,
-          isOffline: false,
-          message: "Located and translated instantly!"
-        });
-      }
-    } catch (fastPathErr: any) {
-      console.warn(`[Search Fast Path Failure] Non-blocking fast path lookup failed for "${cleanWord}". Trying full Gemini analysis... ${fastPathErr.message}`);
-    }
-
-    // 5. In-depth Live Search via Gemini (Runs only if translation/dictionary misses OR spelling needs correction)
+    // 4. In-depth Live Search via Gemini 3.5 Flash (Preferred dynamic route for any non-preset words)
     const client = getGeminiClient();
 
-    if (!client) {
-      console.log(`[Offline Search Fallback] No Gemini API Key. Word is missing in standard dictionary APIs too.`);
-      
-      const simulatedWord = {
-        word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
-        ipa: `/${cleanWord.toLowerCase()}/`,
-        bengaliMeaning: "সন্ধানকৃত শব্দ (Simulated offline)",
-        definition: `Fallback description for "${cleanWord}". Please set your Gemini API key in Settings -> Secrets for live translations of any word!`,
-        definitionBengali: `"${cleanWord}" এর জন্য অফলাইন ডেমো ব্যাখ্যা। সম্পূর্ণ ফিটারের জন্য অনুগ্রহ করে আপনার Gemini API কি যোগ করুন।`,
-        exampleSentence: `We can read and learn about the word "${cleanWord}" once API key is connected.`,
-        exampleSentenceBengali: `এপিআই কি সংযুক্ত হয়ে গেলে আমরা "${cleanWord}" শব্দটি সম্পর্কে বিস্তারিত পড়তে ও শিখতে পারব।`,
-        synonyms: ["example", "demo", "sample", "practice"],
-        difficulty: "intermediate",
-        partOfSpeech: "noun"
-      };
-
-      return res.json({
-        success: true,
-        word: simulatedWord,
-        isOffline: true,
-        message: "Offline Simulator Mode: (Set Gemini API Key inside Settings -> Secrets for live accurate dictionary fetch!)"
-      });
-    }
-
-    try {
-      const prompt = `Perform a brilliant, complete dictionary analysis for the exact English word: "${cleanWord}".
+    if (client) {
+      try {
+        console.log(`[Search Live Path] Automatically triggering direct live API call to Gemini 3.5 Flash for: "${cleanWord}"`);
+        const prompt = `Perform a brilliant, complete dictionary analysis for the exact English word: "${cleanWord}".
 First, determine if "${cleanWord}" is a real, valid, recognizable, standard English dictionary word (even if obscure or rare).
 If it is a valid word, set "isValidWord" to true, and "spellingCorrection" to "".
 If it is a severe misspelling or typo of an actual word, but you can identify the exact correct word intended, set "isValidWord" to false, and set "spellingCorrection" to the corrected spelling of the word (e.g. if requested is "hilarous", "spellingCorrection" should be "hilarious", and you can fill out the rest of the dictionary response using "hilarious"). 
@@ -774,116 +729,110 @@ However, if it is completely non-existent, random letter mashed gibberish (like 
 
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              isValidWord: { type: Type.BOOLEAN, description: "Whether this is a real, valid, recognizable English word, or a slight typo that can be clearly corrected." },
-              spellingCorrection: { type: Type.STRING, description: "Provide the correct English spelling of the intended real word if input has typos. Otherwise return empty string." },
-              word: { type: Type.STRING },
-              ipa: { type: Type.STRING, description: "Phonetic transcription in IPA format, e.g. /ˌkwɪn.tɪˈsen.ʃəl/" },
-              bengaliMeaning: { type: Type.STRING, description: "Bengali equivalent meaning/translation, e.g. সর্বোৎকৃষ্ট উদাহরণ, খাঁটি" },
-              definition: { type: Type.STRING, description: "Detailed english explanation of what the word means" },
-              definitionBengali: { type: Type.STRING, description: "Simple native Bengali description of the word's definition" },
-              exampleSentence: { type: Type.STRING, description: "A beautifully formed sample English sentence showing the word in context" },
-              exampleSentenceBengali: { type: Type.STRING, description: "Accurate natural Bengali translation of the sample sentence" },
-              synonyms: { type: Type.ARRAY, items: { type: Type.STRING } },
-              difficulty: { type: Type.STRING, enum: ["basic", "intermediate", "advanced"] },
-              partOfSpeech: { type: Type.STRING, description: "noun, verb, adjective, adverb, etc." }
-            },
-            required: ["isValidWord", "spellingCorrection", "word", "ipa", "bengaliMeaning", "definition", "definitionBengali", "exampleSentence", "exampleSentenceBengali", "synonyms", "difficulty", "partOfSpeech"]
+        const response = await client.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                isValidWord: { type: Type.BOOLEAN, description: "Whether this is a real, valid, recognizable English word, or a slight typo that can be clearly corrected." },
+                spellingCorrection: { type: Type.STRING, description: "Provide the correct English spelling of the intended real word if input has typos. Otherwise return empty string." },
+                word: { type: Type.STRING },
+                ipa: { type: Type.STRING, description: "Phonetic transcription in IPA format, e.g. /ˌkwɪn.tɪˈsen.ʃəl/" },
+                bengaliMeaning: { type: Type.STRING, description: "Bengali equivalent meaning/translation, e.g. সর্বোৎকৃষ্ট উদাহরণ, খাঁটি" },
+                definition: { type: Type.STRING, description: "Detailed english explanation of what the word means" },
+                definitionBengali: { type: Type.STRING, description: "Simple native Bengali description of the word's definition" },
+                exampleSentence: { type: Type.STRING, description: "A beautifully formed sample English sentence showing the word in context" },
+                exampleSentenceBengali: { type: Type.STRING, description: "Accurate natural Bengali translation of the sample sentence" },
+                synonyms: { type: Type.ARRAY, items: { type: Type.STRING } },
+                difficulty: { type: Type.STRING, enum: ["basic", "intermediate", "advanced"] },
+                partOfSpeech: { type: Type.STRING, description: "noun, verb, adjective, adverb, etc." }
+              },
+              required: ["isValidWord", "spellingCorrection", "word", "ipa", "bengaliMeaning", "definition", "definitionBengali", "exampleSentence", "exampleSentenceBengali", "synonyms", "difficulty", "partOfSpeech"]
+            }
           }
-        }
-      });
-
-      const text = response.text;
-      if (!text) {
-        throw new Error("Received empty response string from Gemini model.");
-      }
-
-      const generatedWord = JSON.parse(text);
-      if (generatedWord.isValidWord === false) {
-        return res.json({
-          success: false,
-          isInvalidWord: true,
-          message: `"${cleanWord}" is not recognized as a valid English word. Please check your spelling!`,
-          suggestion: generatedWord.spellingCorrection || null
         });
-      }
 
-      // Save to cache so subsequent searches are instant
-      searchCache[lcWord] = generatedWord;
-      saveSearchCache();
+        const text = response.text;
+        if (!text) {
+          throw new Error("Received empty response string from Gemini model.");
+        }
 
-      res.json({
-        success: true,
-        word: generatedWord,
-        isOffline: false
-      });
-    } catch (err: any) {
-      console.warn(`Gemini word lookup failed for "${cleanWord}" (falling back to dynamic translate service):`, err.message || err);
-      
-      try {
-        const dynamicFallback = await getDynamicFallbackWord(cleanWord);
-        if (dynamicFallback && 'isInvalidWord' in dynamicFallback) {
+        const generatedWord = JSON.parse(text);
+        if (generatedWord.isValidWord === false) {
+          if (generatedWord.spellingCorrection && generatedWord.spellingCorrection.trim()) {
+            return res.json({
+              success: false,
+              isInvalidWord: true,
+              message: `"${cleanWord}" is not recognized as a valid English word. Please check your spelling!`,
+              suggestion: generatedWord.spellingCorrection
+            });
+          }
+          console.warn(`[Search Live Path] Gemini returned isValidWord: false for "${cleanWord}". Falling back to dynamic translator.`);
+        } else {
+          // Save to cache so subsequent searches are instant
+          searchCache[lcWord] = generatedWord;
+          saveSearchCache();
+
           return res.json({
-            success: false,
-            isInvalidWord: true,
-            message: `"${cleanWord}" is not recognized as a valid English word. Please check your spelling!`,
-            suggestion: null
+            success: true,
+            word: generatedWord,
+            isOffline: false,
+            message: "Successfully generated word details dynamically with Gemini 3.5!"
           });
         }
-        
-        // Save to cache
+      } catch (err: any) {
+        console.warn(`Gemini word lookup failed or rate-limited for "${cleanWord}":`, err.message || err);
+      }
+    }
+
+    // 5. Robust Fallback Pathway (Dictionary API + Translate API)
+    // Triggered automatically if no Gemini client is available, or if Gemini API query failed/threw quota boundaries.
+    try {
+      console.log(`[Search Fallback Path] Launching high-speed Dictionary & Translate parallel lookup for: "${cleanWord}"`);
+      const dynamicFallback = await getDynamicFallbackWord(cleanWord);
+      
+      if (dynamicFallback && dynamicFallback.word) {
+        // Save to persistent cache
         searchCache[lcWord] = dynamicFallback;
         saveSearchCache();
 
         return res.json({
           success: true,
           word: dynamicFallback,
-          isOffline: true,
-          message: "Gemini is currently loaded or offline. Loaded dictionary fallback successfully!"
-        });
-      } catch (fallbackErr) {
-        console.error("Dynamic lookup failed during Gemini exception fallback:", fallbackErr);
-
-        const errorMsg = err.message || "";
-        let friendlyErrorEnglish = `The live dictionary service (Gemini AI) is currently experiencing high demand on Google's servers. This is a temporary spike. Please try searching again in a moment!`;
-        let friendlyErrorBengali = `লাইভ ডিকশনারি সার্ভিসটি (Gemini AI) গুগলের সার্ভারে এই মুহূর্তে তীব্র ট্রাফিকের সম্মুখীন হচ্ছে। এটি একটি সাময়িক বাধা। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন!`;
-
-        if (!errorMsg.toLowerCase().includes("503") && 
-            !errorMsg.toLowerCase().includes("high demand") && 
-            !errorMsg.toLowerCase().includes("unavailable") &&
-            !errorMsg.toLowerCase().includes("limit")) {
-          friendlyErrorEnglish = `We could not fetch live translations for "${cleanWord}" right now due to a temporary server connection delay. Retry searching in a few seconds!`;
-          friendlyErrorBengali = `সাময়িক সংযোগ বিলম্বের বাতিরেক "${cleanWord}" শব্দটির লাইভ ডিকশনারি ফলাফল পাওয়া যায়নি। অনুগ্রহ করে কয়েক সেকেন্ড পর আবার চেষ্টা করুন!`;
-        }
-
-        const backupWord = {
-          word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
-          ipa: `/${cleanWord.toLowerCase()}/`,
-          bengaliMeaning: "সন্ধানকৃত শব্দ (Temporary offline search)",
-          definition: friendlyErrorEnglish,
-          definitionBengali: friendlyErrorBengali,
-          exampleSentence: `You searched for "${cleanWord}". Simply click Search again to fetch fresh live results.`,
-          exampleSentenceBengali: `আপনি "${cleanWord}" অনুসন্ধান করেছেন। লাইভ ডেটা লোড করার জন্য আবার সার্চ এ ক্লিক করুন।`,
-          synonyms: ["dictionary", "term", "vocabulary"],
-          difficulty: "intermediate",
-          partOfSpeech: "noun"
-        };
-
-        res.json({
-          success: true,
-          word: backupWord,
-          isOffline: true,
-          error: err.message
+          isOffline: !client,
+          message: client ? "Gemini experienced an API delay. Loaded dictionary fallback successfully!" : "Located and translated instantly via translation engine!"
         });
       }
+    } catch (fallbackError: any) {
+      console.error("[Search Fallback Path Failure] Dynamic dictionary/translate lookup also encountered an error:", fallbackError);
     }
+
+    // 6. Ultimate Friendlier Error Card (Under extreme network or translation blocks, construct an elegant offline greeting card rather than showing Word Not Found)
+    const friendlyErrorEnglish = `We could not fetch live translations for "${cleanWord}" right now due to a temporary server connection delay. Retry searching in a few seconds!`;
+    const friendlyErrorBengali = `সাময়িক সংযোগ বিলম্বের বাতিরেক "${cleanWord}" শব্দটির লাইভ ডিকশনারি ফলাফল পাওয়া যায়নি। অনুগ্রহ করে কয়েক সেকেন্ড পর আবার চেষ্টা করুন!`;
+
+    const backupWord = {
+      word: cleanWord.charAt(0).toUpperCase() + cleanWord.slice(1).toLowerCase(),
+      ipa: `/${cleanWord.toLowerCase()}/`,
+      bengaliMeaning: "সন্ধানকৃত শব্দ (Temporary offline search)",
+      definition: friendlyErrorEnglish,
+      definitionBengali: friendlyErrorBengali,
+      exampleSentence: `You searched for "${cleanWord}". Simply click Search again to fetch fresh live results.`,
+      exampleSentenceBengali: `আপনি "${cleanWord}" অনুসন্ধান করেছেন। লাইভ ডেটা লোড করার জন্য আবার সার্চ এ ক্লিক করুন।`,
+      synonyms: ["dictionary", "term", "vocabulary"],
+      difficulty: "intermediate",
+      partOfSpeech: "noun"
+    };
+
+    res.json({
+      success: true,
+      word: backupWord,
+      isOffline: true,
+      message: "Resorted to local backup dictionary card."
+    });
   });
 
   // 2.75 Sentence & text translation (English <> Bengali) with Grammar Notes
