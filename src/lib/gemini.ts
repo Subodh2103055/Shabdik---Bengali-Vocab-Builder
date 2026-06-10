@@ -5,11 +5,8 @@ export const getGeminiClient = (): GoogleGenAI | null => {
   let apiKey = "";
   
   try {
-    // Try retrieving from modern React/Vite env or Vercel process environment
-    const metaEnvKey = import.meta.env ? (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY) : "";
-    const procEnvKey = (typeof process !== "undefined" && process.env) ? (process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY) : "";
-    
-    apiKey = (metaEnvKey || procEnvKey || "").trim();
+    const GEMINI_KEY = (import.meta.env?.VITE_GEMINI_API_KEY || import.meta.env?.GEMINI_API_KEY || "PASTE_YOUR_RAW_AIZASY_API_KEY_HERE").trim();
+    apiKey = GEMINI_KEY;
   } catch (err) {
     console.warn("[Gemini Client] Environment detection warning:", err);
   }
@@ -25,8 +22,8 @@ export const getGeminiClient = (): GoogleGenAI | null => {
     console.error("CRITICAL: Gemini API key is missing from environment variables!");
   }
 
-  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "YOUR_ACTUAL_API_KEY_HERE") {
-    console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found or using standard placeholder in frontend.");
+  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "YOUR_ACTUAL_API_KEY_HERE" || apiKey === "PASTE_YOUR_RAW_AIZASY_API_KEY_HERE") {
+    console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found or utilizing active core fallback.");
     return null;
   }
   
