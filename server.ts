@@ -355,33 +355,33 @@ Always return a valid structure without any markdown wrappers.`;
 let aiClient: GoogleGenAI | null = null;
 
 function getGeminiClient(): GoogleGenAI | null {
-  // Directly and securely access process.env.GEMINI_API_KEY with quote/whitespace cleaning
-  let key = process.env.GEMINI_API_KEY?.trim() || "";
+  // Gracefully check both secure and public-scoped keys on the backend
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
   
-  if (key.startsWith('"') && key.endsWith('"')) {
-    key = key.slice(1, -1).trim();
+  let cleanedKey = apiKey;
+  if (cleanedKey.startsWith('"') && cleanedKey.endsWith('"')) {
+    cleanedKey = cleanedKey.slice(1, -1).trim();
   }
-  if (key.startsWith("'") && key.endsWith("'")) {
-    key = key.slice(1, -1).trim();
+  if (cleanedKey.startsWith("'") && cleanedKey.endsWith("'")) {
+    cleanedKey = cleanedKey.slice(1, -1).trim();
   }
   
-  if (!key) {
-    console.log("[Gemini Setup] No active GEMINI_API_KEY found in process.env. Entering local offline fallback mode smoothly.");
+  if (!cleanedKey) {
+    console.error("CRITICAL: Gemini API key is missing from environment variables!");
+    console.log("[Gemini Setup] Entering local offline fallback mode smoothly on the server.");
     return null;
   }
 
-  // Bypass or warn if default local placeholder is somehow carried over to production
-  if (key === "MY_GEMINI_API_KEY") {
-    if (process.env.VERCEL) {
-      console.warn("[Gemini Setup] GEMINI_API_KEY is currently set to 'MY_GEMINI_API_KEY' on Vercel. Please specify your real key in Vercel's Environment Variables dashboard.");
-    }
+  const normalized = cleanedKey.toUpperCase();
+  if (normalized === "MY_GEMINI_API_KEY" || normalized === "YOUR_ACTUAL_API_KEY_HERE" || normalized === "PLACEHOLDER" || normalized === "") {
+    console.log("[Gemini Setup] Active key matches standard default placeholder configurations. Resorting to fallback mechanisms.");
     return null;
   }
 
   if (!aiClient) {
     try {
       aiClient = new GoogleGenAI({
-        apiKey: key,
+        apiKey: cleanedKey,
         httpOptions: {
           headers: {
             'User-Agent': 'aistudio-build',

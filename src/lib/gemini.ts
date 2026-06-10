@@ -2,24 +2,36 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Word, Difficulty } from "../types";
 
 export const getGeminiClient = (): GoogleGenAI | null => {
-  let key = (import.meta.env.VITE_GEMINI_API_KEY || "").trim();
-  if (!key) {
-    key = ((import.meta as any).env?.VITE_GEMINI_API_KEY || "").trim();
-  }
+  let apiKey = "";
   
-  if (key.startsWith('"') && key.endsWith('"')) {
-    key = key.slice(1, -1).trim();
-  }
-  if (key.startsWith("'") && key.endsWith("'")) {
-    key = key.slice(1, -1).trim();
+  try {
+    // Try retrieving from modern React/Vite env or Vercel process environment
+    const metaEnvKey = import.meta.env ? (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY) : "";
+    const procEnvKey = (typeof process !== "undefined" && process.env) ? (process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY) : "";
+    
+    apiKey = (metaEnvKey || procEnvKey || "").trim();
+  } catch (err) {
+    console.warn("[Gemini Client] Environment detection warning:", err);
   }
 
-  if (!key || key === "MY_GEMINI_API_KEY") {
-    console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found in import.meta.env.");
+  if (apiKey.startsWith('"') && apiKey.endsWith('"')) {
+    apiKey = apiKey.slice(1, -1).trim();
+  }
+  if (apiKey.startsWith("'") && apiKey.endsWith("'")) {
+    apiKey = apiKey.slice(1, -1).trim();
+  }
+
+  if (!apiKey) {
+    console.error("CRITICAL: Gemini API key is missing from environment variables!");
+  }
+
+  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "YOUR_ACTUAL_API_KEY_HERE") {
+    console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found or using standard placeholder in frontend.");
     return null;
   }
+  
   return new GoogleGenAI({ 
-    apiKey: key,
+    apiKey: apiKey,
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build'
@@ -34,6 +46,24 @@ export const getGeminiClient = (): GoogleGenAI | null => {
 export async function translateTextDirect(text: string, mode: 'en-to-bn' | 'bn-to-en'): Promise<{ translation: string; notes: string }> {
   const client = getGeminiClient();
   if (!client) {
+    // Transparently route to backend translation gateway to shield client from key dependency
+    console.log("[Gemini Client Fallback] Routing translation directly to backend secure endpoint...");
+    try {
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, mode })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        return {
+          translation: data.translation,
+          notes: data.notes || ""
+        };
+      }
+    } catch (e: any) {
+      console.warn("[Gemini Client Fallback] Translation gateway routing error:", e);
+    }
     throw new Error("Gemini client is not configured on the frontend. Please declare VITE_GEMINI_API_KEY in the Settings > Secrets panel.");
   }
   
@@ -89,6 +119,20 @@ Provide the translation and notes in JSON format. Ensure the notes strictly foll
 export async function searchWordDirect(wordQuery: string): Promise<Word & { isInvalidWord?: boolean; message?: string }> {
   const client = getGeminiClient();
   if (!client) {
+    console.log("[Gemini Client Fallback] Routing search query directly to backend secure endpoint for:", wordQuery);
+    try {
+      const res = await fetch("/api/word/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wordQuery })
+      });
+      const data = await res.json();
+      if (data && data.success && data.word) {
+        return data.word;
+      }
+    } catch (e: any) {
+      console.warn("[Gemini Client Fallback] Search gateway routing error:", e);
+    }
     throw new Error("Gemini client is not configured on the frontend. Please declare VITE_GEMINI_API_KEY in the Settings > Secrets panel.");
   }
 
@@ -132,6 +176,20 @@ Otherwise, set isInvalidWord to false and specify phonetic spelling (IPA), Benga
 export async function generateWordDirect(difficulty: Difficulty, excludeWords: string[]): Promise<Word> {
   const client = getGeminiClient();
   if (!client) {
+    console.log("[Gemini Client Fallback] Routing word generate directly to backend secure endpoint...");
+    try {
+      const res = await fetch("/api/word/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ difficulty, excludeWords })
+      });
+      const data = await res.json();
+      if (data && data.success && data.word) {
+        return data.word;
+      }
+    } catch (e: any) {
+      console.warn("[Gemini Client Fallback] Generator gateway routing error:", e);
+    }
     throw new Error("Gemini client is not configured on the frontend. Please declare VITE_GEMINI_API_KEY in the Settings > Secrets panel.");
   }
 
