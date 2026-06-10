@@ -30,6 +30,81 @@ const PRESET_EXAMPLES = {
   ]
 };
 
+interface LearnedSection {
+  title: string;
+  items: string[];
+}
+
+function parseAndCleanNotes(rawNotes: string): LearnedSection[] {
+  if (!rawNotes) return [];
+
+  // Replace literal "\\n" string characters with clean newlines
+  const preProcessed = rawNotes.replace(/\\n/g, '\n');
+
+  // Split into lines
+  const lines = preProcessed.split('\n');
+  const sections: LearnedSection[] = [];
+  let currentSection: LearnedSection | null = null;
+
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Detect if this line is a heading section
+    const titleLower = trimmed.toLowerCase();
+    const isHeading = 
+      trimmed.startsWith('###') || 
+      trimmed.startsWith('##') || 
+      trimmed.startsWith('#') || 
+      (trimmed.endsWith(':') && (
+        titleLower.includes('insight') || 
+        titleLower.includes('breakdown') || 
+        titleLower.includes('tip') || 
+        titleLower.includes('grammar') || 
+        titleLower.includes('vocab') || 
+        titleLower.includes('pronun') ||
+        titleLower.includes('learning')
+      ));
+
+    if (isHeading) {
+      // Clean up the heading: strip leading hashes, bold markers (**), trailing colons, and trim
+      const title = trimmed
+        .replace(/^[#\s]+/, '') // strip '# '
+        .replace(/^\*\*|\*\*$/g, '') // strip '**'
+        .replace(/:$/, '') // strip trailing ':'
+        .trim();
+
+      currentSection = {
+        title,
+        items: []
+      };
+      sections.push(currentSection);
+    } else {
+      // Strip out raw markdown symbols: leading bullet styles/decimal numbers and inline formatting marks
+      const cleanItem = trimmed
+        .replace(/^[-*•\s\d\.\)\- ]+/, '') // strip bullets and decimal lists
+        .replace(/\*\*|__/g, '')           // strip bold wrappers
+        .replace(/\*|_/g, '')              // strip italic wrappers
+        .replace(/`/g, '')                 // strip code quote characters
+        .trim();
+
+      if (cleanItem) {
+        if (!currentSection) {
+          // Fallback default section if text was loaded before any heading
+          currentSection = {
+            title: "Grammar & Insights",
+            items: []
+          };
+          sections.push(currentSection);
+        }
+        currentSection.items.push(cleanItem);
+      }
+    }
+  }
+
+  return sections;
+}
+
 export default function TranslateView({ 
   showToast
 }: TranslateViewProps) {
@@ -386,13 +461,34 @@ export default function TranslateView({
 
             {/* Smart Learning / AI Grammar Break-down Notes */}
             {notes && (
-              <div className="border-t border-neutral-800/60 pt-3 mt-1">
-                <div className="flex items-center gap-1 text-[10px] font-bold text-amber-300 uppercase tracking-wider mb-2">
-                  <Sparkles className="w-3 h-3" />
+              <div className="border-t border-neutral-800/60 pt-3 mt-1.5 flex flex-col gap-3">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-widest pl-1 mt-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
                   <span>Grammar & Learnings</span>
                 </div>
-                <div className="text-[11px] text-neutral-300 leading-normal bg-neutral-950/50 p-3 rounded-xl border border-neutral-900 font-sans select-text whitespace-pre-line prose-invert">
-                  {notes}
+                
+                <div className="flex flex-col gap-3">
+                  {parseAndCleanNotes(notes).map((section, idx) => (
+                    <div 
+                      key={idx} 
+                      className="bg-neutral-950/60 border border-neutral-900 rounded-2xl p-3.5 flex flex-col gap-2.5 transition-all hover:border-neutral-850/40"
+                    >
+                      <h4 className="text-[10px] font-black text-amber-300/95 uppercase tracking-wider border-b border-neutral-900 pb-1.5 font-sans">
+                        {section.title}
+                      </h4>
+                      <ul className="flex flex-col gap-1.5">
+                        {section.items.map((item, itemIdx) => (
+                          <li 
+                            key={itemIdx} 
+                            className="text-[11px] text-neutral-300 leading-relaxed font-sans flex items-start gap-2 select-text"
+                          >
+                            <span className="text-amber-400 select-none mt-1 shrink-0 text-[10px]">✦</span>
+                            <span className="flex-1 font-medium">{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
