@@ -412,7 +412,7 @@ if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_API_KEY) {
     apiKey: process.env.FIREBASE_API_KEY,
     appId: process.env.FIREBASE_APP_ID || "",
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || `${process.env.FIREBASE_PROJECT_ID}.firebaseapp.com`,
-    firestoreDatabaseId: process.env.FIREBASE_FIRESTORE_DATABASE_ID || "(default)",
+    firestoreDatabaseId: process.env.FIREBASE_FIRESTORE_DATABASE_ID || "",
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.firebasestorage.app`,
     messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || ""
   };
@@ -434,8 +434,9 @@ let db: any = null;
 if (firebaseConfig) {
   try {
     const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || "(default)");
-    console.log("[Firebase Initialization] Connected to cloud Firestore database ID:", firebaseConfig.firestoreDatabaseId || "(default)");
+    const dbId = firebaseConfig.firestoreDatabaseId;
+    db = dbId && dbId !== "(default)" ? getFirestore(firebaseApp, dbId) : getFirestore(firebaseApp);
+    console.log("[Firebase Initialization] Connected to cloud Firestore database:", dbId && dbId !== "(default)" ? dbId : "default");
   } catch (error: any) {
     console.error("[Firebase Initialization] Failed:", error.message);
   }
