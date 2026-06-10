@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import PhoneSimulator from './components/PhoneSimulator';
 import HomeView from './components/HomeView';
 import DeckView from './components/DeckView';
 import SyncView from './components/SyncView';
@@ -9,7 +10,7 @@ import DeveloperNote from './components/DeveloperNote';
 import shabdikLogo from './assets/images/shabdik_logo_1780641345322.png';
 import { Word, UserStats, Difficulty, SyncData } from './types';
 import { OFFLINE_DICTIONARY as SEED_WORDS } from './data/offlineDictionary';
-import { BookOpen, Sparkles, Award, Layers, RefreshCw, Flame, Key, Languages, Heart } from 'lucide-react';
+import { BookOpen, Sparkles, Award, Layers, Smartphone, RefreshCw, Flame, Key, Monitor, Languages, Heart } from 'lucide-react';
 import { searchWordDirect, generateWordDirect } from './lib/gemini';
 import { auth, clientSaveUserDeck, clientLoadUserDeck, initialized as firebaseInitialized } from './lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -95,6 +96,9 @@ export default function App() {
   const [isPullGlobal, setIsPullGlobal] = useState<boolean>(false);
   const [startYGlobal, setStartYGlobal] = useState<number | null>(null);
   const [isRefreshingGlobal, setIsRefreshingGlobal] = useState<boolean>(false);
+
+  // Responsive PC Dashboard vs Interactive Device Simulator view mode
+  const [viewMode, setViewMode] = useState<'simulator' | 'responsive'>('responsive');
 
   // Application theme preset definitions
   const [theme, setTheme] = useState<'cosmic' | 'sunlit' | 'emerald' | 'ocean' | 'rose'>('cosmic');
@@ -723,7 +727,7 @@ export default function App() {
             <div className="flex items-center justify-center sm:justify-start gap-2">
               <span className="text-sm">🇬🇧 ⇄ 🇧🇩</span>
               <span className="text-[10px] bg-amber-400/10 text-amber-300 font-extrabold uppercase px-2 py-0.5 rounded border border-amber-400/20">
-                Fully Responsive
+                {viewMode === 'responsive' ? "PC Responsive App" : "Mobile App Simulator"}
               </span>
             </div>
             <h1 className="text-2xl font-black text-neutral-50 tracking-tight mt-1.5 font-sans">
@@ -819,6 +823,44 @@ export default function App() {
           {/* Divider on desktop */}
           <div className="hidden md:block w-[1px] h-9 bg-neutral-850 self-end mb-0.5"></div>
 
+          {/* Section B: App Preview Layout Toggles */}
+          <div className="flex flex-col gap-1 items-start pl-1">
+            <span className="text-[9px] uppercase tracking-widest text-neutral-500 font-extrabold font-sans">View Layout</span>
+            <div className="flex bg-neutral-950/80 p-0.5 rounded-xl border border-neutral-850">
+              <button
+                onClick={() => {
+                  setViewMode('responsive');
+                  showToast("Switched to Fully Responsive PC App layout!");
+                }}
+                className={`flex items-center gap-1.5 py-1 px-3.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                  viewMode === 'responsive'
+                    ? 'bg-neutral-850 border border-neutral-750 text-amber-400 font-black shadow'
+                    : 'text-neutral-500 hover:text-neutral-250'
+                }`}
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                <span>PC App</span>
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode('simulator');
+                  showToast("Switched to Interactive Phone Simulator!");
+                }}
+                className={`flex items-center gap-1.5 py-1 px-3.5 rounded-lg text-[10.5px] font-bold transition-all cursor-pointer ${
+                  viewMode === 'simulator'
+                    ? 'bg-neutral-850 border border-neutral-750 text-amber-400 font-black shadow'
+                    : 'text-neutral-500 hover:text-neutral-250'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Simulator</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Divider on desktop */}
+          <div className="hidden md:block w-[1px] h-9 bg-neutral-850 self-end mb-0.5"></div>
+
           {/* Section C: Sleek Cloud Sync */}
           <div className="hidden md:flex flex-col gap-1 items-start pl-1">
             <span className="text-[9px] uppercase tracking-widest text-neutral-500 font-extrabold font-sans">Cloud Sync</span>
@@ -855,8 +897,74 @@ export default function App() {
         </div>
       </header>
 
-      {/* Native fully responsive master-detail dashboard across the screen */}
-      <main className="max-w-[1440px] w-full grid grid-cols-1 lg:grid-cols-12 gap-6 xl:gap-8 items-start animate-fade-in text-left lg:flex-1 lg:h-0 lg:overflow-hidden lg:items-stretch font-sans">
+      {/* Primary Dashboard layout conditionally styled by viewMode */}
+      {viewMode === 'simulator' ? (
+        <main className="max-w-md w-full mx-auto flex flex-col items-center justify-center gap-4 animate-fade-in text-left animate-once">
+          <PhoneSimulator 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab}
+            streak={streak}
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="w-full flex-1 flex flex-col"
+              >
+                {activeTab === 'home' && (
+                  <HomeView
+                    currentWord={currentWord}
+                    isLoadingNewWord={isLoadingNewWord}
+                    onRefreshWord={handleRefreshWordByGemini}
+                    onSearchWord={handleSearchWord}
+                    isSaved={isSaved}
+                    onSaveToggle={handleSaveToggle}
+                    streak={streak}
+                    onMarkChecked={handleMarkChecked}
+                    isCheckedToday={isCheckedToday}
+                    showToast={showToast}
+                    searchFeedback={searchFeedback}
+                    onClearSearchFeedback={() => setSearchFeedback(null)}
+                  />
+                )}
+
+                {activeTab === 'deck' && (
+                  <DeckView
+                    savedWords={savedWords}
+                    onRemoveWord={handleRemoveWord}
+                    masteredWords={masteredWords}
+                    onToggleMastered={handleToggleMastered}
+                    showToast={showToast}
+                  />
+                )}
+
+                {activeTab === 'sync' && (
+                  <SyncView
+                    user={user}
+                    onCloudSave={handleUserDeckSave}
+                    isSyncing={isSyncing}
+                  />
+                )}
+
+                {activeTab === 'translate' && (
+                  <TranslateView showToast={showToast} />
+                )}
+
+                {activeTab === 'creator' && (
+                  <div className="py-1 pb-6 w-full">
+                    <DeveloperNote />
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </PhoneSimulator>
+        </main>
+      ) : (
+        /* PC APP MODE - Native fully responsive master-detail dashboard across the screen */
+        <main className="max-w-[1440px] w-full grid grid-cols-1 lg:grid-cols-12 gap-6 xl:gap-8 items-start animate-fade-in text-left lg:flex-1 lg:h-0 lg:overflow-hidden lg:items-stretch">
           
           {/* Mobile responsive persistent bottom navigation bar - fixed at the bottom, visible only on smaller screens (< lg) */}
           <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-neutral-950/95 backdrop-blur-xl border-t border-neutral-900/40 pb-5 pt-3.5 px-3 flex items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.85)]">
@@ -1057,6 +1165,7 @@ export default function App() {
           </div>
 
         </main>
+      )}
 
       {/* Humble Footer */}
       <footer className="mt-8 mb-24 lg:mb-0 border-t border-neutral-900 pt-4 text-center text-[11px] text-neutral-500 w-full max-w-[1440px] shrink-0">
