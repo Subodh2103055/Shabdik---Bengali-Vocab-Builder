@@ -373,7 +373,15 @@ function getGeminiClient(): GoogleGenAI | null {
   }
 
   const normalized = cleanedKey.toUpperCase();
-  if (normalized === "MY_GEMINI_API_KEY" || normalized === "YOUR_ACTUAL_API_KEY_HERE" || normalized === "PLACEHOLDER" || normalized === "") {
+  if (
+    normalized === "MY_GEMINI_API_KEY" || 
+    normalized === "YOUR_ACTUAL_API_KEY_HERE" || 
+    normalized === "PLACEHOLDER" || 
+    normalized === "" || 
+    normalized === "UNDEFINED" || 
+    normalized === "NULL" ||
+    normalized === "NONE"
+  ) {
     console.log("[Gemini Setup] Active key matches standard default placeholder configurations. Resorting to fallback mechanisms.");
     return null;
   }

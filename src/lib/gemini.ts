@@ -16,7 +16,16 @@ export const getGeminiClient = (): GoogleGenAI | null => {
     apiKey = apiKey.slice(1, -1).trim();
   }
 
-  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "YOUR_ACTUAL_API_KEY_HERE" || apiKey === "PASTE_YOUR_RAW_AIZASY_API_KEY_HERE") {
+  const normalized = apiKey.toUpperCase();
+  if (
+    !apiKey || 
+    normalized === "MY_GEMINI_API_KEY" || 
+    normalized === "YOUR_ACTUAL_API_KEY_HERE" || 
+    normalized === "PASTE_YOUR_RAW_AIZASY_API_KEY_HERE" ||
+    normalized === "UNDEFINED" ||
+    normalized === "NULL" ||
+    normalized === "NONE"
+  ) {
     console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found in import.meta.env or process.env.");
     return null;
   }
