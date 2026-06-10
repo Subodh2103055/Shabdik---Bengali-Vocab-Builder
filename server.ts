@@ -400,10 +400,14 @@ function getGeminiClient(): GoogleGenAI | null {
 // Firebase Setup
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let firebaseConfig: any = null;
 try {
-  const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
+  const configPath = path.join(__dirname, "firebase-applet-config.json");
   if (fs.existsSync(configPath)) {
     firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
   }
