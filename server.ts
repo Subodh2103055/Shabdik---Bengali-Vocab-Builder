@@ -686,6 +686,7 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
 }
 
 export const app = express();
+export default app;
 const PORT = 3000;
 
 async function startServer() {
@@ -695,7 +696,7 @@ async function startServer() {
   // API Endpoints
   
   // 1. Get Daily Deterministic Word
-  app.get("/api/word/daily", (req, res) => {
+  app.get(["/api/word/daily", "/word/daily"], (req, res) => {
     // Determine the word deterministically using the day offset since Epoche
     const utcDay = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
     const dailyWord = LOCAL_WORDS[utcDay % LOCAL_WORDS.length];
@@ -708,7 +709,7 @@ async function startServer() {
   });
 
   // 2. Generate/Refresh brand new word via Gemini (instant serving from background pre-heated buffers)
-  app.post("/api/word/generate", async (req, res) => {
+  app.post(["/api/word/generate", "/word/generate"], async (req, res) => {
     const difficulty = req.body.difficulty || "intermediate";
     const excludeWords = req.body.excludeWords || [];
 
@@ -851,7 +852,7 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
   });
 
   // 2.5 Word exact Search via Gemini (highly optimized with fast paths and persistent cache of searched words)
-  app.post("/api/word/search", async (req, res) => {
+  app.post(["/api/word/search", "/word/search"], async (req, res) => {
     const { wordQuery } = req.body;
     if (!wordQuery || typeof wordQuery !== "string" || !wordQuery.trim()) {
       return res.status(400).json({ success: false, message: "Please enter a valid word to search." });
@@ -1014,7 +1015,7 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
   });
 
   // 2.75 Sentence & text translation (English <> Bengali) with Grammar Notes
-  app.post("/api/translate", async (req, res) => {
+  app.post(["/api/translate", "/translate"], async (req, res) => {
     const { text, mode } = req.body; // mode: "en-to-bn" | "bn-to-en"
     if (!text || typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ success: false, message: "Please enter a valid text segment to translate." });
@@ -1163,7 +1164,7 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   });
 
   // 2.8 Bengali and English TTS Audio Proxy to completely bypass client CORS & iframe restrictions
-  app.get("/api/tts", async (req, res) => {
+  app.get(["/api/tts", "/tts"], async (req, res) => {
     const textParam = req.query.text;
     const langParam = req.query.lang || "bn";
 
@@ -1201,7 +1202,7 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   });
 
   // 3. Multi-device sync save
-  app.post("/api/sync/save", async (req, res) => {
+  app.post(["/api/sync/save", "/sync/save"], async (req, res) => {
     const { syncId, data } = req.body;
     if (!syncId || !data) {
       return res.status(400).json({ success: false, message: "Missing syncId or data payload" });
@@ -1211,7 +1212,7 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   });
 
   // 4. Multi-device sync load
-  app.get("/api/sync/load/:syncId", async (req, res) => {
+  app.get(["/api/sync/load/:syncId", "/sync/load/:syncId"], async (req, res) => {
     const { syncId } = req.params;
     const stored = await getSyncSession(syncId);
     if (!stored) {
@@ -1275,20 +1276,24 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Express custom server running on http://localhost:${PORT}`);
-    
-    // Warm up the background generation buffers for each difficulty level asynchronously
-    setTimeout(() => {
-      const difficulties = ["basic", "intermediate", "advanced", "ielts", "gre"];
-      console.log(`[Background Buffer] Initiating asynchronous background replenishment on boot for: ${difficulties.join(', ')}...`);
-      difficulties.forEach(diff => {
-        replenishBuffer(diff).catch(err => {
-          console.error(`[Background Buffer] Initial replenishment failed for "${diff}":`, err);
+  if (process.env.VERCEL) {
+    console.log(`[Server] Production build running on Vercel Node Runtime. Server initialized successfully.`);
+  } else {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Express custom server running on http://localhost:${PORT}`);
+      
+      // Warm up the background generation buffers for each difficulty level asynchronously
+      setTimeout(() => {
+        const difficulties = ["basic", "intermediate", "advanced", "ielts", "gre"];
+        console.log(`[Background Buffer] Initiating asynchronous background replenishment on boot for: ${difficulties.join(', ')}...`);
+        difficulties.forEach(diff => {
+          replenishBuffer(diff).catch(err => {
+            console.error(`[Background Buffer] Initial replenishment failed for "${diff}":`, err);
+          });
         });
-      });
-    }, 1500);
-  });
+      }, 1500);
+    });
+  }
 }
 
 startServer();
