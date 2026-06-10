@@ -9,7 +9,6 @@ const firebaseConfig = {
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "shabdik.firebaseapp.com",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "shabdik.firebasestorage.app",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "78539740626",
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "",
 };
 
 let db: any = null;
@@ -22,10 +21,9 @@ try {
   }
   
   const app = initializeApp(firebaseConfig);
-  const dbId = firebaseConfig.firestoreDatabaseId;
-  db = dbId && dbId !== "(default)" ? getFirestore(app, dbId) : getFirestore(app);
+  db = getFirestore(app);
   initialized = true;
-  console.log("[Firebase Client] Initialized successfully with project ID:", firebaseConfig.projectId, "and database:", dbId && dbId !== "(default)" ? dbId : "default");
+  console.log("[Firebase Client] Initialized successfully with project ID:", firebaseConfig.projectId, "with default database");
 } catch (error: any) {
   console.error("[Firebase Client] Initialization Failed! Under-configured environment configuration is preventing dynamic sync operations.", error);
 }
