@@ -433,8 +433,9 @@ let db: any = null;
 if (firebaseConfig) {
   try {
     const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp);
-    console.log("[Firebase Initialization] Connected to cloud Firestore database: default");
+    const dbId = process.env.FIREBASE_DATABASE_ID || "ai-studio-26f296bf-9934-4857-b249-bbfa849daa15";
+    db = getFirestore(firebaseApp, dbId);
+    console.log("[Firebase Initialization] Connected to cloud Firestore database:", dbId);
   } catch (error: any) {
     console.error("[Firebase Initialization] Failed:", error.message);
   }

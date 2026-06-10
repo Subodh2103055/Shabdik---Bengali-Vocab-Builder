@@ -12,7 +12,8 @@ import { Word, UserStats, Difficulty, SyncData } from './types';
 import { OFFLINE_DICTIONARY as SEED_WORDS } from './data/offlineDictionary';
 import { BookOpen, Sparkles, Award, Layers, Smartphone, RefreshCw, Flame, Key, Monitor, Languages, Heart } from 'lucide-react';
 import { searchWordDirect, generateWordDirect } from './lib/gemini';
-import { clientSaveSync, clientLoadSync, initialized as firebaseInitialized } from './lib/firebase';
+import { auth, clientSaveUserDeck, clientLoadUserDeck, initialized as firebaseInitialized } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export default function App() {
   // Flag to temporarily disable auto-saving when we are fetching/merging from the cloud
@@ -76,23 +77,8 @@ export default function App() {
     }
   });
 
-  // Sync token state
-  const [syncId, setSyncId] = useState<string>(() => {
-    try {
-      let deviceSyncId = localStorage.getItem('vocab_sync_id');
-      if (!deviceSyncId) {
-        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        deviceSyncId = "VOC-";
-        for (let i = 0; i < 4; i++) {
-          deviceSyncId += alphabet[Math.floor(Math.random() * alphabet.length)];
-        }
-        localStorage.setItem('vocab_sync_id', deviceSyncId);
-      }
-      return deviceSyncId;
-    } catch {
-      return "";
-    }
-  });
+  // User Authentication State
+  const [user, setUser] = useState<any | null>(null);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   // Toast feedback overlay
@@ -260,11 +246,7 @@ export default function App() {
     localStorage.setItem('vocab_completed_dates', JSON.stringify(completedDates));
   }, [completedDates]);
 
-  useEffect(() => {
-    if (syncId) {
-      localStorage.setItem('vocab_sync_id', syncId);
-    }
-  }, [syncId]);
+
 
   // Utility to generate YYYY-MM-DD
   const getTodayDateString = () => {
@@ -485,9 +467,38 @@ export default function App() {
     });
   };
 
-  // Cloud action: save current local state to memory store
-  const handleCloudSaveState = async (silent: boolean = false) => {
-    if (!syncId) return;
+  // Listen to Google Authentication State Changes
+  useEffect(() => {
+    if (!firebaseInitialized || !auth) return;
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Automatically fetch saved deck
+        handleUserDeckLoad(currentUser.uid, false);
+      } else {
+        // Reset state on sign out
+        handleSignOutClearState();
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleSignOutClearState = () => {
+    setSavedWords([]);
+    setMasteredWords([]);
+    setStreak(0);
+    setCompletedDates([]);
+    setIsCheckedToday(false);
+    localStorage.removeItem('vocab_saved_words');
+    localStorage.removeItem('vocab_mastered_words');
+    localStorage.removeItem('vocab_streak');
+    localStorage.removeItem('vocab_completed_dates');
+  };
+
+  // Cloud action: save current local state to memory store under user uid
+  const handleUserDeckSave = async (silent: boolean = false) => {
+    if (!user || !user.uid) return;
     const currentPayload = getLocalDataPayloadString();
     
     // If the current local state matches what is already synced, skip uploading in background
@@ -510,121 +521,32 @@ export default function App() {
         masteredWords
       };
 
-      // 1. Primary write: client-side Firebase direct integration
-      let success = false;
-      if (firebaseInitialized) {
-        success = await clientSaveSync(syncId, syncPayload);
-      }
-
-      // 2. Secondary fallback: backend API endpoint
-      if (!success) {
-        try {
-          const res = await fetch("/api/sync/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ syncId, data: syncPayload })
-          });
-          const data = await res.json();
-          success = !!data.success;
-        } catch {
-          success = false;
-        }
-      }
+      // client-side Firebase user UID write
+      let success = await clientSaveUserDeck(user.uid, syncPayload);
 
       if (success) {
         lastSyncedPayloadRef.current = currentPayload;
         if (!silent) {
-          showToast("✓ Synced vocabulary bank to safe cloud session!");
+          showToast("✓ Synced vocabulary bank to secure cloud profile!");
         }
       } else {
         throw new Error("Unable to save sync state to cloud. Please verify setup.");
       }
     } catch {
-      if (!silent) showToast("Sync upload failed. Verify networking endpoint.");
+      if (!silent) showToast("Sync upload failed. Verify connection status.");
     } finally {
       if (!silent) setIsSyncing(false);
     }
   };
 
-  const handleNewSyncIdGenerated = async (newId: string) => {
-    setSyncId(newId);
-    // Suppress any background save triggers during identity change
-    isImportingCloudDataRef.current = true;
-    try {
-      const statsPayload: UserStats = {
-        streak,
-        lastCompletedDate: completedDates[completedDates.length - 1] || null,
-        completedDates,
-        totalWordsLearned: savedWords.length
-      };
-
-      const syncPayload: SyncData = {
-        stats: statsPayload,
-        savedWords,
-        masteredWords
-      };
-
-      // 1. Primary write: client-side Firebase direct integration
-      let success = false;
-      if (firebaseInitialized) {
-        success = await clientSaveSync(newId, syncPayload);
-      }
-
-      // 2. Secondary fallback: backend API endpoint
-      if (!success) {
-        try {
-          const res = await fetch("/api/sync/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ syncId: newId, data: syncPayload })
-          });
-          const data = await res.json();
-          success = !!data.success;
-        } catch {
-          success = false;
-        }
-      }
-
-      if (success) {
-        // Pre-cache payload
-        lastSyncedPayloadRef.current = getLocalDataPayloadString();
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      isImportingCloudDataRef.current = false;
-    }
-  };
-
   // Cloud action: load target cloud state and merge
-  const handleCloudLoadState = async (targetSyncId: string, silent: boolean = false): Promise<boolean> => {
+  const handleUserDeckLoad = async (uid: string, silent: boolean = false): Promise<boolean> => {
     if (!silent) setIsSyncing(true);
     isImportingCloudDataRef.current = true; // Prevent automatic re-saves during state integration
     try {
-      let cloudData: SyncData | null = null;
-
-      // 1. Primary read: client-side Firebase direct integration
-      if (firebaseInitialized) {
-        cloudData = await clientLoadSync(targetSyncId);
-      }
-
-      // 2. Secondary fallback: backend API endpoint
-      if (!cloudData) {
-        try {
-          const res = await fetch(`/api/sync/load/${targetSyncId}`);
-          if (res.ok) {
-            const responseBody = await res.json();
-            if (responseBody.success && responseBody.data) {
-              cloudData = responseBody.data;
-            }
-          }
-        } catch {
-          cloudData = null;
-        }
-      }
+      let cloudData = await clientLoadUserDeck(uid);
       
       if (cloudData) {
-        
         let localMergedSaved: Word[] = [];
         let localMergedMastered: string[] = [];
         let localMergedStreak = streak;
@@ -693,7 +615,7 @@ export default function App() {
         lastSyncedPayloadRef.current = mergedPayloadString;
 
         if (!silent) {
-          showToast(`✓ Session ${targetSyncId} loaded & synchronized!`);
+          showToast(`✓ Cloud synchronized successfully!`);
         }
         return true;
       }
@@ -711,7 +633,7 @@ export default function App() {
   // AUTOMATIC CLOUD SYNC HIERARCHY
   // 1. Debounced background push whenever any local progression state shifts
   useEffect(() => {
-    if (!syncId) return;
+    if (!user || !user.uid) return;
 
     if (isImportingCloudDataRef.current) {
       isImportingCloudDataRef.current = false;
@@ -724,22 +646,22 @@ export default function App() {
     }
 
     const timeoutId = setTimeout(() => {
-      handleCloudSaveState(true); // run silent auto-upload
+      handleUserDeckSave(true); // run silent auto-upload
     }, 1800); // 1.8 seconds debounce
 
     return () => clearTimeout(timeoutId);
-  }, [savedWords, masteredWords, streak, completedDates]);
+  }, [savedWords, masteredWords, streak, completedDates, user]);
 
   // 2. Silent background pull every 8 seconds to merge data updated on other devices
   useEffect(() => {
-    if (!syncId) return;
+    if (!user || !user.uid) return;
 
     const intervalId = setInterval(() => {
-      handleCloudLoadState(syncId, true); // run silent poll
+      handleUserDeckLoad(user.uid, true); // run silent poll
     }, 8000);
 
     return () => clearInterval(intervalId);
-  }, [syncId]);
+  }, [user]);
 
   const isSaved = savedWords.some(w => w.word.toLowerCase() === currentWord.word.toLowerCase());
 
@@ -943,17 +865,31 @@ export default function App() {
           <div className="hidden md:flex flex-col gap-1 items-start pl-1">
             <span className="text-[9px] uppercase tracking-widest text-neutral-500 font-extrabold font-sans">Cloud Sync</span>
             <div className="flex items-center gap-3 bg-neutral-950/80 px-3 py-1 rounded-xl border border-neutral-850 h-[32px]">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[8px] uppercase tracking-wide text-neutral-500 font-bold block">Token</span>
-                <span className="font-mono text-neutral-100 font-bold text-[11px] tracking-wider">{syncId}</span>
+              <div className="flex items-baseline gap-1.5 min-w-0 max-w-[150px]">
+                {user ? (
+                  <>
+                    <span className="text-[8px] uppercase tracking-wide text-neutral-500 font-bold block shrink-0">User</span>
+                    <span className="font-sans text-neutral-100 font-bold text-[10.5px] tracking-wider truncate">{user.email}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-sans text-neutral-450 font-bold text-[10px] tracking-wider">Guest Mode</span>
+                  </>
+                )}
               </div>
               <div className="w-[1px] h-3 bg-neutral-850"></div>
               <div className="flex items-center gap-1.5 px-1">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                </span>
-                <span className="text-[9px] text-emerald-400 uppercase font-black tracking-wider">Live auto-sync</span>
+                {user ? (
+                  <>
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                    </span>
+                    <span className="text-[9px] text-emerald-400 uppercase font-black tracking-wider">Live Active</span>
+                  </>
+                ) : (
+                  <span className="text-[9px] text-neutral-550 uppercase font-bold tracking-wider">Offline</span>
+                )}
               </div>
             </div>
           </div>
@@ -1007,12 +943,9 @@ export default function App() {
 
                 {activeTab === 'sync' && (
                   <SyncView
-                    syncId={syncId}
-                    setSyncId={setSyncId}
-                    onCloudSave={handleCloudSaveState}
-                    onCloudLoad={handleCloudLoadState}
+                    user={user}
+                    onCloudSave={handleUserDeckSave}
                     isSyncing={isSyncing}
-                    onNewSyncIdGenerated={handleNewSyncIdGenerated}
                   />
                 )}
 
@@ -1210,12 +1143,9 @@ export default function App() {
 
                   {activeTab === 'sync' && (
                     <SyncView
-                      syncId={syncId}
-                      setSyncId={setSyncId}
-                      onCloudSave={handleCloudSaveState}
-                      onCloudLoad={handleCloudLoadState}
+                      user={user}
+                      onCloudSave={handleUserDeckSave}
                       isSyncing={isSyncing}
-                      onNewSyncIdGenerated={handleNewSyncIdGenerated}
                     />
                   )}
 

@@ -1,45 +1,50 @@
 import React, { useState } from 'react';
-import { Cloud, CloudUpload, CloudDownload, RefreshCw, Smartphone, Key, Info, Check } from 'lucide-react';
-import { SyncData } from '../types';
+import { Cloud, CloudUpload, RefreshCw, Info, LogOut, ShieldCheck, Mail, LogIn, Lock } from 'lucide-react';
+import { auth, googleProvider, signInWithPopup, signOut, initialized as firebaseInitialized } from '../lib/firebase';
 
 interface SyncViewProps {
-  syncId: string;
-  setSyncId: (id: string) => void;
+  user: any;
   onCloudSave: () => Promise<void>;
-  onCloudLoad: (targetSyncId: string) => Promise<boolean>;
   isSyncing: boolean;
-  onNewSyncIdGenerated?: (id: string) => void;
 }
 
 export default function SyncView({
-  syncId,
-  setSyncId,
+  user,
   onCloudSave,
-  onCloudLoad,
-  isSyncing,
-  onNewSyncIdGenerated
+  isSyncing
 }: SyncViewProps) {
-  const [inputSyncId, setInputSyncId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const handleManualLoad = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignIn = async () => {
     setErrorMessage("");
     setSuccessMessage("");
-    
-    if (!inputSyncId.trim()) {
-      setErrorMessage("Please enter a valid 6-character sync code first.");
+    if (!firebaseInitialized || !auth) {
+      setErrorMessage("Firebase is not initialized. Please verify your VITE_FIREBASE_ environment parameters in Settings.");
       return;
     }
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setSuccessMessage("Successfully authenticated with Google!");
+    } catch (err: any) {
+      console.error(err);
+      if (err.message && err.message.includes("is not enabled")) {
+        setErrorMessage("Google Auth is under-configured in the Firebase console. Please ensure the Google provider is fully enabled.");
+      } else {
+        setErrorMessage(err.message || "Failed to authenticate with Google. Please retry.");
+      }
+    }
+  };
 
-    const cleanCode = inputSyncId.trim().toUpperCase();
-    const success = await onCloudLoad(cleanCode);
-    if (success) {
-      setSuccessMessage(`Success! Merged and downloaded cloud deck. Assigned Sync ID: ${cleanCode}`);
-      setSyncId(cleanCode);
-    } else {
-      setErrorMessage("No cloud deck found for this code. Verify typing or generate a new session!");
+  const handleSignOut = async () => {
+    setErrorMessage("");
+    setSuccessMessage("");
+    if (!auth) return;
+    try {
+      await signOut(auth);
+      setSuccessMessage("Logged out successfully. All local deck states have been cleared.");
+    } catch (err: any) {
+      setErrorMessage(err.message || "Logout failed.");
     }
   };
 
@@ -48,29 +53,10 @@ export default function SyncView({
     setSuccessMessage("");
     try {
       await onCloudSave();
-      setSuccessMessage("Vocabulary bank and stats uploaded to cloud session successfully!");
+      setSuccessMessage("Your current deck has been successfully backed up to your Google account!");
     } catch {
-      setErrorMessage("Cloud upload failed. Please verify connection and retry.");
+      setErrorMessage("Backup upload failed. Verify networking connection or Firestore rules.");
     }
-  };
-
-  const handleGenerateNewCode = () => {
-    setErrorMessage("");
-    setSuccessMessage("");
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No confusing characters like 0, O, 1, I
-    let code = "VOC-";
-    for (let i = 0; i < 4; i++) {
-      code += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
-    
-    if (onNewSyncIdGenerated) {
-      onNewSyncIdGenerated(code);
-    } else {
-      setSyncId(code);
-    }
-    
-    setInputSyncId(code);
-    setSuccessMessage(`New code session generated: ${code}. Connect other tabs to this session!`);
   };
 
   return (
@@ -81,88 +67,111 @@ export default function SyncView({
         <Cloud className="w-10 h-10 text-amber-400 animate-pulse" />
         <div>
           <h3 className="text-sm font-extrabold text-neutral-100 uppercase tracking-widest">
-            Cross-Device Sync
+            Google Cloud Sync
           </h3>
           <p className="text-[10px] text-neutral-400 mt-1 max-w-[280px]">
-            Keep your English vocabulary cards, memorization streaks, and mastered collections synchronized across your phones and computers seamlessly!
+            Log in to automatically synchronize your vocabulary cards, streak counts, and memorized deck across all desktop and mobile devices.
           </p>
         </div>
       </div>
 
-      {/* Assigned Sync Code Showcase */}
-      <div className="bg-neutral-950/60 p-4 border border-neutral-850 rounded-2xl flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <Key className="w-4 h-4 text-amber-400" />
-          <span className="text-xs font-bold text-neutral-200 uppercase tracking-wider">
-            Active Device Identity
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between bg-neutral-900/60 px-3.5 py-2.5 rounded-xl border border-neutral-800">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-neutral-500 font-bold uppercase">Current Sync Token</span>
-            <span className="text-sm font-mono font-bold text-neutral-100 tracking-wider">
-              {syncId}
-            </span>
+      {!user ? (
+        /* Sign In Interface */
+        <div className="bg-neutral-950/60 p-5 border border-neutral-850 rounded-2xl flex flex-col gap-4 items-center justify-center text-center">
+          <div className="bg-neutral-900 p-3 rounded-full border border-neutral-800">
+            <Lock className="w-6 h-6 text-neutral-400" />
           </div>
+          <div>
+            <h4 className="text-xs font-bold text-neutral-200 uppercase tracking-wider">
+              Secure Auth Required
+            </h4>
+            <p className="text-[10px] text-neutral-450 mt-1 max-w-[240px]">
+              Sync requires a secure, password-less Google authentication session.
+            </p>
+          </div>
+
           <button
-            onClick={handleGenerateNewCode}
-            className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold px-2.5 py-1.5 rounded-lg border border-neutral-700 transition-all"
+            onClick={handleSignIn}
+            className="w-full bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-extrabold py-3 px-4 rounded-xl transition-all uppercase tracking-wider flex items-center justify-center gap-2 border border-neutral-200 shadow"
           >
-            New Session
+            {/* Custom high-contrast Google G logo */}
+            <svg className="w-4 h-4 mr-1 shrink-0" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+            Continue with Google
           </button>
         </div>
+      ) : (
+        /* Authenticated Session Dashboard */
+        <div className="bg-neutral-950/60 p-4 border border-neutral-850 rounded-2xl flex flex-col gap-4">
+          <div className="flex items-center gap-3 bg-neutral-900/60 p-3 rounded-xl border border-neutral-800">
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || "User Avatar"}
+                referrerPolicy="no-referrer"
+                className="w-9 h-9 rounded-full border border-neutral-700"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-amber-400 text-neutral-950 font-bold flex items-center justify-center text-xs border border-neutral-700">
+                {user.email?.charAt(0).toUpperCase() || "U"}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-emerald-400 uppercase font-black tracking-wider flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Secure Sync Active
+                </span>
+              </div>
+              <p className="text-[11.5px] font-mono text-neutral-100 font-bold truncate">
+                {user.email}
+              </p>
+            </div>
+          </div>
 
-        <button
-          onClick={handleSaveTrigger}
-          disabled={isSyncing}
-          className="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-neutral-950 text-xs font-extrabold py-2.5 rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm"
-        >
-          {isSyncing ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              Uploading...
-            </>
-          ) : (
-            <>
-              <CloudUpload className="w-4 h-4" strokeWidth={2.5} />
-              Backup state & Sync
-            </>
-          )}
-        </button>
-      </div>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleSaveTrigger}
+              disabled={isSyncing}
+              className="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-neutral-950 text-xs font-extrabold py-2.5 rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              {isSyncing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Syncing with Cloud...
+                </>
+              ) : (
+                <>
+                  <CloudUpload className="w-4 h-4" strokeWidth={2.5} />
+                  Backup current state now
+                </>
+              )}
+            </button>
 
-      {/* Manual Code Input Load */}
-      <form onSubmit={handleManualLoad} className="bg-neutral-950/60 p-4 border border-neutral-850 rounded-2xl flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <Smartphone className="w-4 h-4 text-amber-400" />
-          <span className="text-xs font-bold text-neutral-200 uppercase tracking-wider">
-            Connect Another Device
-          </span>
+            <button
+              onClick={handleSignOut}
+              className="w-full bg-neutral-900 hover:bg-neutral-800 text-rose-400 text-xs font-semibold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 border border-neutral-800/45"
+            >
+              <LogOut className="w-4 h-4" /> Sign Out from Account
+            </button>
+          </div>
         </div>
-
-        <p className="text-[10.5px] text-neutral-400 leading-relaxed mb-1">
-          Have an existing vocabulary session code? Enter it below to download, merge, and continue your streak progress on this device:
-        </p>
-
-        <div className="flex gap-2">
-          <input
-            type="text"
-            required
-            placeholder="e.g. VOC-A3K9"
-            value={inputSyncId}
-            onChange={(e) => setInputSyncId(e.target.value.toUpperCase())}
-            className="flex-1 bg-neutral-900 border border-neutral-805 px-3 py-2 rounded-xl text-sm text-neutral-200 placeholder-neutral-500 font-mono tracking-wider focus:outline-none focus:border-amber-400/50"
-          />
-          <button
-            type="submit"
-            disabled={isSyncing}
-            className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-4 py-2 rounded-xl border border-neutral-700 text-xs font-extrabold uppercase transition-all flex items-center gap-1"
-          >
-            <CloudDownload className="w-4 h-4" /> Load
-          </button>
-        </div>
-      </form>
+      )}
 
       {/* Feedback Messages */}
       {successMessage && (
@@ -178,11 +187,10 @@ export default function SyncView({
 
       {/* Helpful Info Panel */}
       <div className="p-3.5 bg-neutral-900/40 border border-neutral-850/60 rounded-xl flex gap-2.5 items-start">
-        <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+        <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-[10px] text-neutral-400 leading-relaxed">
-          <strong className="text-neutral-300 font-semibold">⚡ Pure Real-time Sync (No manual work needed!): </strong>
-          You <strong className="text-amber-400 font-bold">do NOT</strong> need to export, download, or manually back up files. 
-          Once you load this Sync ID on your other PC or phone once, your learned terms, mastered words, and session streak will sync silently and automatically in the background every few seconds!
+          <strong className="text-neutral-300 font-semibold">⚡ Automatic Background Saving: </strong>
+          Once authenticated with your Google account, any additions to your vocabulary bank, memorized flags, or streak increases will be saved automatically in the background under your secure profile database.
         </div>
       </div>
 
