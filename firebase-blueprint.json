@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "SyncSession": {
+      "title": "SyncSession",
+      "description": "Vocabulary decks and streaks synchronize payload",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "JSON containing deck list, mastery count, and streaks"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["data", "updatedAt"]
+    },
+    "SearchCache": {
+      "title": "SearchCache",
+      "description": "Phonetic breakdown and translation definitions cached to bypass Gemini limits",
+      "type": "object",
+      "properties": {
+        "word": {
+          "type": "object",
+          "description": "Cached dictionary analysis result"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["word", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "syncSessions/{syncId}": {
+      "schema": "SyncSession",
+      "description": "User multi-device session states"
+    },
+    "searchCache/{word}": {
+      "schema": "SearchCache",
+      "description": "Cached search analysis results"
+    }
+  }
+}

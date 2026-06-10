@@ -397,6 +397,31 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+// Firebase Setup
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+
+let firebaseConfig: any = null;
+try {
+  const configPath = path.resolve(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  }
+} catch (e) {
+  console.error("[Firebase Config Loading] Failed to read firebase-applet-config.json:", e);
+}
+
+let db: any = null;
+if (firebaseConfig) {
+  try {
+    const firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    console.log("[Firebase Initialization] Connected to cloud Firestore database ID:", firebaseConfig.firestoreDatabaseId);
+  } catch (error: any) {
+    console.error("[Firebase Initialization] Failed:", error.message);
+  }
+}
+
 // File-system based fallback storage for cross-device cloud sync sessions, so that
 // dev server restarts (due to code edits) or container restarts do not lose user tokens.
 const SYNC_FILE_PATH = process.env.VERCEL
@@ -443,6 +468,88 @@ function saveSearchCache() {
     fs.writeFileSync(SEARCH_CACHE_FILE_PATH, JSON.stringify(searchCache, null, 2), "utf-8");
   } catch (e) {
     console.error("[Search Persistent Cache] Failed to write cache to disk:", e);
+  }
+}
+
+// Durable dynamic backend wrappers to handle Firestore operations asynchronously with standard file system fallbacks
+async function getSyncSession(syncId: string): Promise<any> {
+  if (db) {
+    try {
+      const docRef = doc(db, "syncSessions", syncId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const docData = docSnap.data();
+        if (docData && docData.data) {
+          // Sync local memory-cache/file-copy with latest from Firebase cloud
+          syncDB[syncId] = docData;
+          saveSyncDB();
+          return docData;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[Firestore syncSessions read failure] Falling back to memory/disk store:`, err.message);
+    }
+  }
+  return syncDB[syncId] || null;
+}
+
+async function saveSyncSession(syncId: string, data: any) {
+  const payload = {
+    data,
+    updatedAt: new Date().toISOString()
+  };
+  syncDB[syncId] = payload;
+  saveSyncDB();
+
+  if (db) {
+    try {
+      const docRef = doc(db, "syncSessions", syncId);
+      await setDoc(docRef, payload);
+    } catch (err: any) {
+      console.warn(`[Firestore syncSessions write failure]`, err.message);
+    }
+  }
+}
+
+async function fetchFromSearchCache(lcWord: string): Promise<any> {
+  // Hit fast local memory cache first
+  if (searchCache[lcWord]) {
+    return searchCache[lcWord];
+  }
+  if (db) {
+    try {
+      const docRef = doc(db, "searchCache", lcWord);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const docData = docSnap.data();
+        if (docData && docData.word) {
+          // Reflect back to memory cache
+          searchCache[lcWord] = docData.word;
+          saveSearchCache();
+          return docData.word;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[Firestore searchCache read failure]:`, err.message);
+    }
+  }
+  return null;
+}
+
+async function writeToSearchCache(lcWord: string, wordData: any) {
+  searchCache[lcWord] = wordData;
+  saveSearchCache();
+
+  if (db) {
+    try {
+      const docRef = doc(db, "searchCache", lcWord);
+      await setDoc(docRef, {
+        word: wordData,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      console.warn(`[Firestore searchCache write failure]:`, err.message);
+    }
   }
 }
 
@@ -756,11 +863,12 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
     }
 
     // 3. High-Speed Persistent Cache Lookups (sub-millisecond repeat-definition retrieval)
-    if (searchCache[lcWord]) {
+    const cachedWordData = await fetchFromSearchCache(lcWord);
+    if (cachedWordData) {
       console.log(`[Instant Persistent Cache Hit] Found "${cleanWord}" in persistent search cache.`);
       return res.json({
         success: true,
-        word: searchCache[lcWord],
+        word: cachedWordData,
         isOffline: false,
         message: "Found word instantly in recent search history!"
       });
@@ -824,8 +932,7 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
           console.warn(`[Search Live Path] Gemini returned isValidWord: false for "${cleanWord}". Falling back to dynamic translator.`);
         } else {
           // Save to cache so subsequent searches are instant
-          searchCache[lcWord] = generatedWord;
-          saveSearchCache();
+          await writeToSearchCache(lcWord, generatedWord);
 
           return res.json({
             success: true,
@@ -847,8 +954,7 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
       
       if (dynamicFallback && dynamicFallback.word) {
         // Save to persistent cache
-        searchCache[lcWord] = dynamicFallback;
-        saveSearchCache();
+        await writeToSearchCache(lcWord, dynamicFallback);
 
         return res.json({
           success: true,
@@ -1074,23 +1180,19 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   });
 
   // 3. Multi-device sync save
-  app.post("/api/sync/save", (req, res) => {
+  app.post("/api/sync/save", async (req, res) => {
     const { syncId, data } = req.body;
     if (!syncId || !data) {
       return res.status(400).json({ success: false, message: "Missing syncId or data payload" });
     }
-    syncDB[syncId] = {
-      data,
-      updatedAt: new Date().toISOString()
-    };
-    saveSyncDB(); // Store session on disk so it persists across server restarts
+    await saveSyncSession(syncId, data);
     res.json({ success: true, message: "Vocabulary, stats, and progression synced to cloud" });
   });
 
   // 4. Multi-device sync load
-  app.get("/api/sync/load/:syncId", (req, res) => {
+  app.get("/api/sync/load/:syncId", async (req, res) => {
     const { syncId } = req.params;
-    const stored = syncDB[syncId];
+    const stored = await getSyncSession(syncId);
     if (!stored) {
       return res.status(404).json({ success: false, message: "Sync code not found. Make sure the spelling is exact!" });
     }
