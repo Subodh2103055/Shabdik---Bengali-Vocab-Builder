@@ -1,17 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Word, Difficulty } from "../types";
 
-let key = ((import.meta as any).env?.VITE_GEMINI_API_KEY || "").trim();
-if (key.startsWith('"') && key.endsWith('"')) {
-  key = key.slice(1, -1).trim();
-}
-if (key.startsWith("'") && key.endsWith("'")) {
-  key = key.slice(1, -1).trim();
-}
-
 export const getGeminiClient = (): GoogleGenAI | null => {
+  let key = (import.meta.env.VITE_GEMINI_API_KEY || "").trim();
   if (!key) {
-    console.log("[Gemini Client] No VITE_GEMINI_API_KEY found in import.meta.env.");
+    key = ((import.meta as any).env?.VITE_GEMINI_API_KEY || "").trim();
+  }
+  
+  if (key.startsWith('"') && key.endsWith('"')) {
+    key = key.slice(1, -1).trim();
+  }
+  if (key.startsWith("'") && key.endsWith("'")) {
+    key = key.slice(1, -1).trim();
+  }
+
+  if (!key || key === "MY_GEMINI_API_KEY") {
+    console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found in import.meta.env.");
     return null;
   }
   return new GoogleGenAI({ 
@@ -36,13 +40,24 @@ export async function translateTextDirect(text: string, mode: 'en-to-bn' | 'bn-t
   const srcLang = mode === 'en-to-bn' ? "English" : "Bengali";
   const trgLang = mode === 'en-to-bn' ? "Bengali" : "English";
   
-  const systemPrompt = `You are an expert bilingual AI Translator specializing in translating between English and Bengali beautifully.
-Your goal is to provide a highly authentic natural translation, along with syntactic or breakdown learning notes (under "notes").`;
+  const systemPrompt = `You are an expert bilingual AI Translator specializing in translating between English and Bengali.
+Your goal is to provide a highly authentic, natural translation, along with structured syntactic, breakdown learning notes (under "notes").
+
+You must strictly structure the "notes" field as standard Markdown using these exact headings:
+
+### Grammatical Insights:
+* [Detailed breakdown of structural particles, verbs, and pronouns with English phonetics / romanization]
+
+### Vocabulary Breakdown:
+* [Word-by-word literal translations mapping the English word to the Bengali word]
+
+### Pronunciation Tips:
+* [Clear phonetic breakdown matching words to everyday English sounds (e.g., 'Shob' as in 'robe')]`;
 
   const prompt = `Translate the following text from ${srcLang} to ${trgLang}:
 "${text}"
 
-Provide the translation and notes (grammatically parsing unique vocabulary or cultural references if helpful) in JSON format.`;
+Provide the translation and notes in JSON format. Ensure the notes strictly follow the requested Markdown structure with the three specified headings (### Grammatical Insights:, ### Vocabulary Breakdown:, and ### Pronunciation Tips:) and detailed custom contents for this specific text translation.`;
 
   const response = await client.models.generateContent({
     model: "gemini-3.5-flash",
