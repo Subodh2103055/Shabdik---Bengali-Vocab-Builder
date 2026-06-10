@@ -355,8 +355,8 @@ Always return a valid structure without any markdown wrappers.`;
 let aiClient: GoogleGenAI | null = null;
 
 function getGeminiClient(): GoogleGenAI | null {
-  // Directly and securely access process.env.GEMINI_API_KEY with quote/whitespace cleaning
-  let key = process.env.GEMINI_API_KEY?.trim() || "";
+  // Gracefully check both secure and public-scoped keys on the backend
+  let key = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
   
   if (key.startsWith('"') && key.endsWith('"')) {
     key = key.slice(1, -1).trim();
@@ -366,15 +366,13 @@ function getGeminiClient(): GoogleGenAI | null {
   }
   
   if (!key) {
-    console.log("[Gemini Setup] No active GEMINI_API_KEY found in process.env. Entering local offline fallback mode smoothly.");
+    console.log("[Gemini Setup] No active GEMINI_API_KEY or VITE_GEMINI_API_KEY found in process.env. Entering local offline fallback mode smoothly.");
     return null;
   }
 
-  // Bypass or warn if default local placeholder is somehow carried over to production
-  if (key === "MY_GEMINI_API_KEY") {
-    if (process.env.VERCEL) {
-      console.warn("[Gemini Setup] GEMINI_API_KEY is currently set to 'MY_GEMINI_API_KEY' on Vercel. Please specify your real key in Vercel's Environment Variables dashboard.");
-    }
+  const normalized = key.toUpperCase();
+  if (normalized === "MY_GEMINI_API_KEY" || normalized === "YOUR_ACTUAL_API_KEY_HERE" || normalized === "PLACEholder" || normalized === "") {
+    console.log("[Gemini Setup] Active key matches standard default placeholder configurations. Resorting to fallback mechanisms.");
     return null;
   }
 
