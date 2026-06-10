@@ -2,24 +2,26 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Word, Difficulty } from "../types";
 
 export const getGeminiClient = (): GoogleGenAI | null => {
-  let key = (import.meta.env?.VITE_GEMINI_API_KEY || "").trim();
-  if (!key) {
-    key = ((import.meta as any).env?.VITE_GEMINI_API_KEY || "").trim();
+  let apiKey = "";
+  try {
+    apiKey = (import.meta.env?.VITE_GEMINI_API_KEY || (typeof process !== "undefined" ? process.env?.VITE_GEMINI_API_KEY : "") || "").trim();
+  } catch (err) {
+    apiKey = "";
   }
   
-  if (key.startsWith('"') && key.endsWith('"')) {
-    key = key.slice(1, -1).trim();
+  if (apiKey.startsWith('"') && apiKey.endsWith('"')) {
+    apiKey = apiKey.slice(1, -1).trim();
   }
-  if (key.startsWith("'") && key.endsWith("'")) {
-    key = key.slice(1, -1).trim();
+  if (apiKey.startsWith("'") && apiKey.endsWith("'")) {
+    apiKey = apiKey.slice(1, -1).trim();
   }
 
-  if (!key || key === "MY_GEMINI_API_KEY" || key === "YOUR_ACTUAL_API_KEY_HERE" || key === "PASTE_YOUR_RAW_AIZASY_API_KEY_HERE") {
-    console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found in import.meta.env.");
+  if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "YOUR_ACTUAL_API_KEY_HERE" || apiKey === "PASTE_YOUR_RAW_AIZASY_API_KEY_HERE") {
+    console.log("[Gemini Client] No valid VITE_GEMINI_API_KEY found in import.meta.env or process.env.");
     return null;
   }
   return new GoogleGenAI({ 
-    apiKey: key,
+    apiKey: apiKey,
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build'

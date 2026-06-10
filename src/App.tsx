@@ -5,7 +5,6 @@ import DeckView from './components/DeckView';
 import SyncView from './components/SyncView';
 import TranslateView from './components/TranslateView';
 import DeveloperNote from './components/DeveloperNote';
-import PhoneSimulator from './components/PhoneSimulator';
 // @ts-ignore
 import shabdikLogo from './assets/images/shabdik_logo_1780641345322.png';
 import { Word, UserStats, Difficulty, SyncData } from './types';
@@ -111,20 +110,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('shabdik_theme', theme);
   }, [theme]);
-
-  // Perspective Viewports toggler
-  const [viewMode, setViewMode] = useState<'simulator' | 'responsive'>('simulator');
-
-  useEffect(() => {
-    const savedView = localStorage.getItem('shabdik_view_mode');
-    if (savedView === 'simulator' || savedView === 'responsive') {
-      setViewMode(savedView);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('shabdik_view_mode', viewMode);
-  }, [viewMode]);
 
   // Global pull to refresh window listeners that override browser swipe-down reloads
   useEffect(() => {
@@ -834,44 +819,6 @@ export default function App() {
           {/* Divider on desktop */}
           <div className="hidden md:block w-[1px] h-9 bg-neutral-850 self-end mb-0.5"></div>
 
-          {/* Section B: Perspective Viewports */}
-          <div className="flex flex-col gap-1 items-start pl-1">
-            <span className="text-[9px] uppercase tracking-widest text-neutral-500 font-extrabold font-sans">View Layout</span>
-            <div className="flex bg-neutral-950/80 p-0.5 rounded-xl border border-neutral-850">
-              <button
-                id="viewmode-btn-simulator"
-                onClick={() => {
-                  setViewMode('simulator');
-                  showToast("Simulator view mode activated!");
-                }}
-                className={`py-1 px-3.5 rounded-lg text-[10.5px] font-bold transition-all relative cursor-pointer ${
-                  viewMode === 'simulator'
-                    ? 'bg-neutral-850 border border-neutral-750 text-amber-400 font-black shadow'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                }`}
-              >
-                📱 Phone
-              </button>
-              <button
-                id="viewmode-btn-responsive"
-                onClick={() => {
-                  setViewMode('responsive');
-                  showToast("Responsive Full-screen activated!");
-                }}
-                className={`py-1 px-3.5 rounded-lg text-[10.5px] font-bold transition-all relative cursor-pointer ${
-                  viewMode === 'responsive'
-                    ? 'bg-neutral-850 border border-neutral-750 text-amber-400 font-black shadow'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                }`}
-              >
-                💻 Monitor
-              </button>
-            </div>
-          </div>
-
-          {/* Divider on desktop */}
-          <div className="hidden md:block w-[1px] h-9 bg-neutral-850 self-end mb-0.5"></div>
-
           {/* Section C: Sleek Cloud Sync */}
           <div className="hidden md:flex flex-col gap-1 items-start pl-1">
             <span className="text-[9px] uppercase tracking-widest text-neutral-500 font-extrabold font-sans">Cloud Sync</span>
@@ -908,74 +855,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Primary Dashboard layout conditionally styled by viewMode */}
-      {viewMode === 'simulator' ? (
-        <main className="max-w-md w-full mx-auto flex flex-col items-center justify-center gap-4 animate-fade-in text-left animate-once">
-          <PhoneSimulator 
-            activeTab={activeTab} 
-            setActiveTab={setActiveTab}
-            streak={streak}
-          >
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.22, ease: "easeOut" }}
-                className="w-full flex-1 flex flex-col"
-              >
-                {activeTab === 'home' && (
-                  <HomeView
-                    currentWord={currentWord}
-                    isLoadingNewWord={isLoadingNewWord}
-                    onRefreshWord={handleRefreshWordByGemini}
-                    onSearchWord={handleSearchWord}
-                    isSaved={isSaved}
-                    onSaveToggle={handleSaveToggle}
-                    streak={streak}
-                    onMarkChecked={handleMarkChecked}
-                    isCheckedToday={isCheckedToday}
-                    showToast={showToast}
-                    searchFeedback={searchFeedback}
-                    onClearSearchFeedback={() => setSearchFeedback(null)}
-                  />
-                )}
-
-                {activeTab === 'deck' && (
-                  <DeckView
-                    savedWords={savedWords}
-                    onRemoveWord={handleRemoveWord}
-                    masteredWords={masteredWords}
-                    onToggleMastered={handleToggleMastered}
-                    showToast={showToast}
-                  />
-                )}
-
-                {activeTab === 'sync' && (
-                  <SyncView
-                    user={user}
-                    onCloudSave={handleUserDeckSave}
-                    isSyncing={isSyncing}
-                  />
-                )}
-
-                {activeTab === 'translate' && (
-                  <TranslateView showToast={showToast} />
-                )}
-
-                {activeTab === 'creator' && (
-                  <div className="py-1 pb-6 w-full">
-                    <DeveloperNote />
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </PhoneSimulator>
-        </main>
-      ) : (
-        /* PC APP MODE - Native fully responsive master-detail dashboard across the screen */
-        <main className="max-w-[1440px] w-full grid grid-cols-1 lg:grid-cols-12 gap-6 xl:gap-8 items-start animate-fade-in text-left lg:flex-1 lg:h-0 lg:overflow-hidden lg:items-stretch font-sans">
+      {/* Primary Dashboard layout - Native fully responsive master-detail dashboard across the screen */}
+      <main className="max-w-[1440px] w-full grid grid-cols-1 lg:grid-cols-12 gap-6 xl:gap-8 items-start animate-fade-in text-left lg:flex-1 lg:h-0 lg:overflow-hidden lg:items-stretch font-sans">
           
           {/* Mobile responsive persistent bottom navigation bar - fixed at the bottom, visible only on smaller screens (< lg) */}
           <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-neutral-950/95 backdrop-blur-xl border-t border-neutral-900/40 pb-5 pt-3.5 px-3 flex items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.85)]">
@@ -1176,7 +1057,6 @@ export default function App() {
           </div>
 
         </main>
-      )}
 
       {/* Humble Footer */}
       <footer className="mt-8 mb-24 lg:mb-0 border-t border-neutral-900 pt-4 text-center text-[11px] text-neutral-500 w-full max-w-[1440px] shrink-0">
