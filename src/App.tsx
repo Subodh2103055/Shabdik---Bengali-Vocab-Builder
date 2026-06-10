@@ -12,6 +12,7 @@ import { Word, UserStats, Difficulty, SyncData } from './types';
 import { OFFLINE_DICTIONARY as SEED_WORDS } from './data/offlineDictionary';
 import { BookOpen, Sparkles, Award, Layers, Smartphone, RefreshCw, Flame, Key, Monitor, Languages, Heart } from 'lucide-react';
 import { searchWordDirect, generateWordDirect } from './lib/gemini';
+import { clientSaveSync, clientLoadSync, initialized as firebaseInitialized } from './lib/firebase';
 
 export default function App() {
   // Flag to temporarily disable auto-saving when we are fetching/merging from the cloud
@@ -509,17 +510,34 @@ export default function App() {
         masteredWords
       };
 
-      const res = await fetch("/api/sync/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ syncId, data: syncPayload })
-      });
-      const data = await res.json();
-      if (data.success) {
+      // 1. Primary write: client-side Firebase direct integration
+      let success = false;
+      if (firebaseInitialized) {
+        success = await clientSaveSync(syncId, syncPayload);
+      }
+
+      // 2. Secondary fallback: backend API endpoint
+      if (!success) {
+        try {
+          const res = await fetch("/api/sync/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ syncId, data: syncPayload })
+          });
+          const data = await res.json();
+          success = !!data.success;
+        } catch {
+          success = false;
+        }
+      }
+
+      if (success) {
         lastSyncedPayloadRef.current = currentPayload;
         if (!silent) {
           showToast("✓ Synced vocabulary bank to safe cloud session!");
         }
+      } else {
+        throw new Error("Unable to save sync state to cloud. Please verify setup.");
       }
     } catch {
       if (!silent) showToast("Sync upload failed. Verify networking endpoint.");
@@ -546,13 +564,28 @@ export default function App() {
         masteredWords
       };
 
-      const res = await fetch("/api/sync/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ syncId: newId, data: syncPayload })
-      });
-      const data = await res.json();
-      if (data.success) {
+      // 1. Primary write: client-side Firebase direct integration
+      let success = false;
+      if (firebaseInitialized) {
+        success = await clientSaveSync(newId, syncPayload);
+      }
+
+      // 2. Secondary fallback: backend API endpoint
+      if (!success) {
+        try {
+          const res = await fetch("/api/sync/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ syncId: newId, data: syncPayload })
+          });
+          const data = await res.json();
+          success = !!data.success;
+        } catch {
+          success = false;
+        }
+      }
+
+      if (success) {
         // Pre-cache payload
         lastSyncedPayloadRef.current = getLocalDataPayloadString();
       }
@@ -568,15 +601,29 @@ export default function App() {
     if (!silent) setIsSyncing(true);
     isImportingCloudDataRef.current = true; // Prevent automatic re-saves during state integration
     try {
-      const res = await fetch(`/api/sync/load/${targetSyncId}`);
-      if (!res.ok) {
-        isImportingCloudDataRef.current = false;
-        return false;
+      let cloudData: SyncData | null = null;
+
+      // 1. Primary read: client-side Firebase direct integration
+      if (firebaseInitialized) {
+        cloudData = await clientLoadSync(targetSyncId);
       }
-      const responseBody = await res.json();
+
+      // 2. Secondary fallback: backend API endpoint
+      if (!cloudData) {
+        try {
+          const res = await fetch(`/api/sync/load/${targetSyncId}`);
+          if (res.ok) {
+            const responseBody = await res.json();
+            if (responseBody.success && responseBody.data) {
+              cloudData = responseBody.data;
+            }
+          }
+        } catch {
+          cloudData = null;
+        }
+      }
       
-      if (responseBody.success && responseBody.data) {
-        const cloudData: SyncData = responseBody.data;
+      if (cloudData) {
         
         let localMergedSaved: Word[] = [];
         let localMergedMastered: string[] = [];
