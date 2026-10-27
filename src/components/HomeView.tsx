@@ -254,8 +254,8 @@ export default function HomeView({
                 </div>
               </div>
 
-              {/* Word & Pronunciation */}
-              <div className="mb-3">
+              {/* Word & Listen Option (Listen on far right) */}
+              <div className="flex items-center justify-between gap-4 mb-3">
                 <h2 className="text-3xl font-extrabold text-neutral-50 tracking-tight font-sans">
                   {currentWord.word}
                 </h2>
@@ -264,6 +264,7 @@ export default function HomeView({
                   ipa={currentWord.ipa}
                   size="normal"
                   showAudioButton={true}
+                  className="shrink-0"
                 />
               </div>
 
