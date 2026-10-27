@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Search, Star, Trash2, ArrowLeftRight, Volume2, HelpCircle, Layers, CheckCircle2, ChevronLeft, ChevronRight, BookOpen, Award, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Word, Difficulty } from '../types';
@@ -25,6 +25,32 @@ export default function DeckView({
   const [currentFlashcardIndex, setCurrentFlashcardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [deckType, setDeckType] = useState<'all' | 'learning' | 'mastered'>('all');
+
+  // Touch swipe tracking for intuitive mobile flashcard swiping
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const distance = touchStartX.current - touchEndX.current;
+    if (distance > 45) {
+      // Swiped left -> Next Card
+      nextFlashcard();
+    } else if (distance < -45) {
+      // Swiped right -> Previous Card
+      prevFlashcard();
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   // Play pronunciation synthesized on demand
   const playPronunciation = (txt: string) => {
@@ -237,15 +263,46 @@ export default function DeckView({
             No words match the selected difficulty search filter for flashcards.
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-4 py-2">
-            <div className="text-[10px] text-neutral-400 font-medium">
-              Card {currentFlashcardIndex + 1} of {filteredWords.length}
+          <div className="flex flex-col items-center gap-3 py-1">
+            {/* 1. TOP MOBILE & DESKTOP NAVIGATION BAR (Guarantees visible Back/Next controls on every mobile viewport without scrolling) */}
+            <div className="flex items-center justify-between w-full bg-neutral-950/80 border border-neutral-850 px-3 py-2 rounded-2xl shadow-sm">
+              <button
+                onClick={prevFlashcard}
+                disabled={filteredWords.length <= 1}
+                className="px-3 py-1.5 rounded-xl bg-neutral-900 active:bg-neutral-800 hover:bg-neutral-850 text-neutral-200 text-xs font-bold flex items-center gap-1 border border-neutral-800 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Previous card"
+              >
+                <ChevronLeft className="w-4 h-4 text-amber-400" />
+                <span>Back Card</span>
+              </button>
+
+              <div className="flex flex-col items-center">
+                <span className="text-xs font-black font-mono text-amber-400 tracking-wider">
+                  Card {currentFlashcardIndex + 1} of {filteredWords.length}
+                </span>
+                <span className="text-[8.5px] uppercase tracking-widest text-neutral-500 font-semibold">
+                  Swipe or tap
+                </span>
+              </div>
+
+              <button
+                onClick={nextFlashcard}
+                disabled={filteredWords.length <= 1}
+                className="px-3 py-1.5 rounded-xl bg-neutral-900 active:bg-neutral-800 hover:bg-neutral-850 text-neutral-200 text-xs font-bold flex items-center gap-1 border border-neutral-800 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Next card"
+              >
+                <span>Next Card</span>
+                <ChevronRight className="w-4 h-4 text-amber-400" />
+              </button>
             </div>
 
-            {/* Core Flashcard visual flip engine */}
+            {/* 2. Core Flashcard visual flip engine with touch swipe detection */}
             <div 
               onClick={() => setIsFlipped(!isFlipped)}
-              className="relative w-full aspect-[4/5] max-h-[300px] bg-transparent cursor-pointer group perspe-1000"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              className="relative w-full h-[330px] sm:h-[350px] bg-transparent cursor-pointer group perspe-1000 select-none"
             >
               <div className={`relative w-full h-full transition-transform duration-500 transform-style-3d ${
                 isFlipped ? 'rotate-y-180' : ''
@@ -270,32 +327,60 @@ export default function DeckView({
                     </span>
                   </div>
 
-                  <div className="flex justify-between items-center pt-2 border-t border-neutral-900">
-                    <span className="text-[9px] uppercase font-bold text-neutral-500">
-                      Difficulty: {filteredWords[currentFlashcardIndex].difficulty}
-                    </span>
-                    <button 
+                  {/* Front card bottom bar with direct Quick-Nav and Audio */}
+                  <div className="flex justify-between items-center pt-2.5 border-t border-neutral-900">
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        playPronunciation(filteredWords[currentFlashcardIndex].word);
+                        prevFlashcard();
                       }}
-                      className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-amber-400"
+                      disabled={filteredWords.length <= 1}
+                      className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-[10.5px] text-neutral-300 font-bold flex items-center gap-0.5 border border-neutral-800 disabled:opacity-30"
+                      title="Back Card"
                     >
-                      <Volume2 className="w-3.5 h-3.5" />
+                      <ChevronLeft className="w-3.5 h-3.5 text-amber-400" /> Back
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] uppercase font-bold text-neutral-500">
+                        {filteredWords[currentFlashcardIndex].difficulty}
+                      </span>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playPronunciation(filteredWords[currentFlashcardIndex].word);
+                        }}
+                        className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-amber-400"
+                        title="Pronounce"
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextFlashcard();
+                      }}
+                      disabled={filteredWords.length <= 1}
+                      className="px-2.5 py-1 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-[10.5px] text-neutral-300 font-bold flex items-center gap-0.5 border border-neutral-800 disabled:opacity-30"
+                      title="Next Card"
+                    >
+                      Next <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
                     </button>
                   </div>
                 </div>
 
-                {/* BACK FACE (Bengali Meaning & Simple Descriptions) */}
-                <div className="absolute inset-0 w-full h-full rounded-[24px] bg-neutral-900 border-2 border-amber-400/30 p-5 flex flex-col justify-between backface-hidden rotate-y-180 shadow-xl overflow-y-auto">
-                  <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                {/* BACK FACE (Bengali Meaning & Descriptions) */}
+                <div className="absolute inset-0 w-full h-full rounded-[24px] bg-neutral-900 border-2 border-amber-400/30 p-5 flex flex-col justify-between backface-hidden rotate-y-180 shadow-xl overflow-hidden">
+                  <div className="flex justify-between items-center border-b border-neutral-800 pb-2 shrink-0">
                     <span className="text-[10px] uppercase font-bold text-amber-400">
                       Translation & Context
                     </span>
                     <span className="text-[9px] text-neutral-500">Click to flip back</span>
                   </div>
 
-                  <div className="flex-1 py-3 flex flex-col justify-center gap-3">
+                  <div className="flex-1 py-2 flex flex-col justify-start gap-2.5 overflow-y-auto pr-1">
                     <div>
                       <span className="text-[9px] text-neutral-500 font-semibold uppercase block">Bengali Translation</span>
                       <p className="text-base font-bold text-neutral-200">
@@ -334,26 +419,51 @@ export default function DeckView({
                     )}
                   </div>
 
-                  <div className="text-[9px] text-neutral-500 border-t border-neutral-850 pt-1 text-center">
-                    Tap anywhere on the card to flip
+                  {/* Back card bottom bar with direct Quick-Nav */}
+                  <div className="flex justify-between items-center border-t border-neutral-800 pt-2 shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        prevFlashcard();
+                      }}
+                      disabled={filteredWords.length <= 1}
+                      className="px-2.5 py-1 rounded-lg bg-neutral-950/90 hover:bg-neutral-800 text-[10px] text-neutral-300 font-bold flex items-center gap-0.5 border border-neutral-800 disabled:opacity-30"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5 text-amber-400" /> Back
+                    </button>
+
+                    <span className="text-[9px] text-neutral-500 font-medium">Tap to flip</span>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        nextFlashcard();
+                      }}
+                      disabled={filteredWords.length <= 1}
+                      className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-neutral-950 text-[10px] font-black flex items-center gap-0.5 shadow-sm disabled:opacity-30"
+                    >
+                      Next <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Flashcard navigation arrows */}
-            <div className="flex gap-4 w-full">
+            {/* 3. PRIMARY BOTTOM NAVIGATION BUTTONS (generously padded so they never get obscured by mobile bottom nav) */}
+            <div className="flex gap-3 w-full pt-1 pb-24 md:pb-4">
               <button
                 onClick={prevFlashcard}
-                className="flex-1 bg-neutral-900 hover:bg-neutral-800 py-2.5 rounded-xl border border-neutral-800 text-xs text-neutral-200 font-semibold flex items-center justify-center gap-1"
+                disabled={filteredWords.length <= 1}
+                className="flex-1 bg-neutral-900 active:bg-neutral-850 hover:bg-neutral-800 py-3 rounded-2xl border border-neutral-800 text-xs text-neutral-100 font-bold flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <ChevronLeft className="w-4 h-4" /> Back Card
+                <ChevronLeft className="w-4 h-4 text-amber-400" /> Back Card
               </button>
               <button
                 onClick={nextFlashcard}
-                className="flex-1 bg-neutral-900 hover:bg-neutral-800 py-2.5 rounded-xl border border-neutral-800 text-xs text-neutral-200 font-semibold flex items-center justify-center gap-1"
+                disabled={filteredWords.length <= 1}
+                className="flex-1 bg-amber-400 active:bg-amber-500 hover:bg-amber-300 py-3 rounded-2xl text-xs text-neutral-950 font-black flex items-center justify-center gap-1.5 shadow-lg shadow-amber-400/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Next Card <ChevronRight className="w-4 h-4" />
+                Next Card <ChevronRight className="w-4 h-4 text-neutral-950" />
               </button>
             </div>
           </div>

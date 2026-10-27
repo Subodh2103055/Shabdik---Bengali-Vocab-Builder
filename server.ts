@@ -272,7 +272,7 @@ Generate a beautifully structured response containing its phonetic spelling (IPA
 Always return a valid structure without any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.8-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -582,6 +582,8 @@ async function writeToSearchCache(lcWord: string, wordData: any) {
   }
 }
 
+let quotaCooldownUntil = 0;
+
 // Background buffer storage to make Gemini word generation 100% instant (0ms!)
 const GENERATED_WORD_BUFFER: Record<string, any[]> = {
   basic: [],
@@ -602,11 +604,16 @@ const replenishingFlags: Record<string, boolean> = {
 
 // Asynchronously pre-generates words in the background so that the next click is always instant (0ms!)
 async function replenishBuffer(difficulty: string) {
+  // If in rate limit / quota cooldown, don't call Gemini
+  if (Date.now() < quotaCooldownUntil) {
+    return;
+  }
+
   const client = getGeminiClient();
   if (!client) return;
 
-  // We keep at most 3 words in the buffer per difficulty
-  if (GENERATED_WORD_BUFFER[difficulty] && GENERATED_WORD_BUFFER[difficulty].length >= 3) {
+  // We keep at most 2 words in the buffer per difficulty
+  if (GENERATED_WORD_BUFFER[difficulty] && GENERATED_WORD_BUFFER[difficulty].length >= 2) {
     return;
   }
 
@@ -647,7 +654,7 @@ ${excludePrompt ? excludePrompt + "\n" : ""}3. Provide its accurate phonetic tra
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
     const response = await client.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.8-flash",
       contents: prompt,
       config: {
         temperature: 1.15,
@@ -684,18 +691,28 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
       }
     }
   } catch (error: any) {
-    console.error(`[Background Buffer Error] Could not replenish buffer for "${difficulty}":`, error.message);
+    const errorMsg = error?.message || String(error);
+    console.error(`[Background Buffer Error] Could not replenish buffer for "${difficulty}":`, errorMsg);
+    // If rate-limited or quota exhausted, cool down for 30 minutes to prevent spamming
+    if (errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("quota") || errorMsg.includes("Quota")) {
+      quotaCooldownUntil = Date.now() + 30 * 60 * 1000;
+      console.warn(`[Background Buffer] Quota limit encountered. Pausing background replenishment for 30 minutes.`);
+    }
   } finally {
     replenishingFlags[difficulty] = false;
-    if (GENERATED_WORD_BUFFER[difficulty].length < 2) {
-      setTimeout(() => replenishBuffer(difficulty), 1500);
-    }
   }
 }
 
+process.on("uncaughtException", (err) => {
+  console.error("[Uncaught Exception]:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[Unhandled Rejection]:", reason);
+});
+
 export const app = express();
 export default app;
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   // Middleware
@@ -798,7 +815,7 @@ ${excludePrompt ? excludePrompt + "\n" : ""}3. Provide its accurate phonetic tra
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.8-flash",
         contents: prompt,
         config: {
           temperature: 1.1,
@@ -829,8 +846,10 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
 
       const generatedWord = JSON.parse(text);
       
-      // Since buffer is empty, asynchronously schedule replenish to pre-fill it for NEXT clicks
-      setTimeout(() => replenishBuffer(difficulty), 50);
+      // Since buffer is empty and generation succeeded, lazily schedule 1 buffer item if cooldown not active
+      if (Date.now() >= quotaCooldownUntil) {
+        setTimeout(() => replenishBuffer(difficulty), 500);
+      }
 
       res.json({
         success: true,
@@ -838,16 +857,17 @@ Strictly adhere to the response schema and output valid JSON. Do not write any m
         isFallback: false
       });
     } catch (error: any) {
-      console.error("Gemini generation failed, falling back safely:", error.message);
+      const errorMsg = error?.message || String(error);
+      console.error("Gemini generation failed, falling back safely:", errorMsg);
+      if (errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED") || errorMsg.includes("quota") || errorMsg.includes("Quota")) {
+        quotaCooldownUntil = Date.now() + 30 * 60 * 1000;
+      }
       const normalizedExclude = excludeWords.map((w: string) => w.toLowerCase());
       const matching = LOCAL_WORDS.filter(w => w.difficulty === difficulty && !normalizedExclude.includes(w.word.toLowerCase()));
       const pool = matching.length > 0 ? matching : LOCAL_WORDS.filter(w => w.difficulty === difficulty);
       const finalPool = pool.length > 0 ? pool : LOCAL_WORDS;
       const idx = Math.floor(Math.random() * finalPool.length);
       const chosen = finalPool[idx];
-
-      // Schedule buffer replenish anyway
-      setTimeout(() => replenishBuffer(difficulty), 50);
 
       res.json({
         success: true,
@@ -919,7 +939,7 @@ However, if it is completely non-existent, random letter mashed gibberish (like 
 Strictly adhere to the response schema and output valid JSON. Do not write any markdown wrappers.`;
 
         const response = await client.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-3.8-flash",
           contents: prompt,
           config: {
             responseMimeType: "application/json",
@@ -1131,7 +1151,7 @@ In the "notes" property, provide concise, engaging grammatical annotation, bulle
 Strictly adhere to the response schema and output valid JSON. Do not wrap the JSON output in markdown blocks.`;
 
       const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-3.8-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1247,35 +1267,18 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   const hasDist = fs.existsSync(path.join(distPath, "index.html"));
 
   if (process.env.NODE_ENV !== "production" || !hasDist) {
-    console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware asynchronously)`);
-    let viteDevServer: any = null;
-    const viteInitializationPromise = import("vite")
-      .then((viteModule) => {
-        return viteModule.createServer({
-          server: { middlewareMode: true },
-          appType: "spa",
-        });
-      })
-      .then(vite => {
-        viteDevServer = vite;
-        console.log(`[Vite] Dev server middleware initialized successfully!`);
-        return vite;
-      })
-      .catch(err => {
-        console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
+    console.log(`[Server] Starting in DEVELOPMENT/DEV mode (Initializing Vite Dev Middleware)`);
+    try {
+      const viteModule = await import("vite");
+      const viteDevServer = await viteModule.createServer({
+        server: { middlewareMode: true },
+        appType: "spa",
       });
-
-    app.use(async (req, res, next) => {
-      if (!viteDevServer) {
-        console.log(`[Server] Holdup: request "${req.url}" is waiting for Vite dev server initialization...`);
-        await viteInitializationPromise;
-      }
-      if (viteDevServer) {
-        viteDevServer.middlewares(req, res, next);
-      } else {
-        res.status(503).send("Vite Development Server is starting up. Please reload in a few seconds.");
-      }
-    });
+      app.use(viteDevServer.middlewares);
+      console.log(`[Vite] Dev server middleware initialized and mounted successfully!`);
+    } catch (err) {
+      console.error(`[Vite] Failed to start Vite dev server middleware:`, err);
+    }
   } else {
     console.log(`[Server] Starting in PRODUCTION mode (Serving static assets from ${distPath})`);
     app.use(express.static(distPath));
@@ -1289,19 +1292,10 @@ Strictly adhere to the response schema and output valid JSON. Do not wrap the JS
   } else {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Express custom server running on http://localhost:${PORT}`);
-      
-      // Warm up the background generation buffers for each difficulty level asynchronously
-      setTimeout(() => {
-        const difficulties = ["basic", "intermediate", "advanced", "ielts", "gre"];
-        console.log(`[Background Buffer] Initiating asynchronous background replenishment on boot for: ${difficulties.join(', ')}...`);
-        difficulties.forEach(diff => {
-          replenishBuffer(diff).catch(err => {
-            console.error(`[Background Buffer] Initial replenishment failed for "${diff}":`, err);
-          });
-        });
-      }, 1500);
     });
   }
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("[Server] Fatal startup error:", err);
+});

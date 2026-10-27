@@ -1024,7 +1024,7 @@ export default function App() {
           </aside>
 
           {/* Right Side native dashboard workspace panel (8 columns) */}
-          <div className="col-span-12 lg:col-span-8 xl:col-span-9 flex flex-col gap-6 w-full pb-24 lg:pb-0 lg:h-full lg:max-h-full lg:overflow-y-auto lg:pr-2">
+          <div className="col-span-12 lg:col-span-8 xl:col-span-9 flex flex-col gap-6 w-full pb-32 lg:pb-0 lg:h-full lg:max-h-full lg:overflow-y-auto lg:pr-2">
             
             {/* Main Application active page view frame (Sized properly for PC views) */}
             <div className="bg-neutral-900/30 border border-neutral-900/90 rounded-[28px] p-6 lg:min-h-[520px] min-h-[300px] flex flex-col justify-stretch">

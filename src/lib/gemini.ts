@@ -89,7 +89,7 @@ You must strictly structure the "notes" field as standard Markdown using these e
 Provide the translation and notes in JSON format. Ensure the notes strictly follow the requested Markdown structure with the three specified headings (### Grammatical Insights:, ### Vocabulary Breakdown:, and ### Pronunciation Tips:) and detailed custom contents for this specific text translation.`;
 
   const response = await client.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: prompt,
     config: {
       systemInstruction: systemPrompt,
@@ -140,7 +140,7 @@ If the input "${wordQuery}" is NOT a real or valid English word, set isInvalidWo
 Otherwise, set isInvalidWord to false and specify phonetic spelling (IPA), Bengali meaning, a simple English definition, a simple Bengali definition, a contextual example sentence, its Bengali example translation, synonyms array, difficulty level ("basic", "intermediate", "advanced", "ielts", "gre"), and part of speech.`;
 
   const response = await client.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -197,7 +197,7 @@ Exclude these words from your selection: ${excludeWords.join(", ")}.
 Provide its phonetic spelling (IPA), Bengali meaning, a simple English definition, a simple Bengali definition, a contextual example sentence, its Bengali example translation, synonyms array, and part of speech.`;
 
   const response = await client.models.generateContent({
-    model: "gemini-3.5-flash",
+    model: "gemini-3.8-flash",
     contents: prompt,
     config: {
       responseMimeType: "application/json",
