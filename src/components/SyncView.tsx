@@ -5,12 +5,14 @@ import { auth, googleProvider, signInWithPopup, signOut, initialized as firebase
 interface SyncViewProps {
   user: any;
   onCloudSave: () => Promise<void>;
+  onCloudLoad?: () => Promise<boolean>;
   isSyncing: boolean;
 }
 
 export default function SyncView({
   user,
   onCloudSave,
+  onCloudLoad,
   isSyncing
 }: SyncViewProps) {
   const [errorMessage, setErrorMessage] = useState("");
@@ -56,6 +58,22 @@ export default function SyncView({
       setSuccessMessage("Your current deck has been successfully backed up to your Google account!");
     } catch {
       setErrorMessage("Backup upload failed. Verify networking connection or Firestore rules.");
+    }
+  };
+
+  const handleLoadTrigger = async () => {
+    if (!onCloudLoad) return;
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      const ok = await onCloudLoad();
+      if (ok) {
+        setSuccessMessage("Successfully pulled and restored your vocabulary deck from the cloud!");
+      } else {
+        setErrorMessage("No cloud deck found for this account, or cloud was empty.");
+      }
+    } catch {
+      setErrorMessage("Failed to pull cloud deck. Verify connection status.");
     }
   };
 
@@ -148,7 +166,7 @@ export default function SyncView({
             <button
               onClick={handleSaveTrigger}
               disabled={isSyncing}
-              className="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-neutral-950 text-xs font-extrabold py-2.5 rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm"
+              className="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-neutral-950 text-xs font-extrabold py-2.5 rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
             >
               {isSyncing ? (
                 <>
@@ -162,6 +180,17 @@ export default function SyncView({
                 </>
               )}
             </button>
+
+            {onCloudLoad && (
+              <button
+                onClick={handleLoadTrigger}
+                disabled={isSyncing}
+                className="w-full bg-neutral-900/90 hover:bg-neutral-850 disabled:opacity-50 text-amber-300 text-xs font-extrabold py-2.5 rounded-xl transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 border border-neutral-800 shadow-sm cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                Restore / Pull words from cloud
+              </button>
+            )}
 
             <button
               onClick={handleSignOut}

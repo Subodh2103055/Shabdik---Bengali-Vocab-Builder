@@ -316,6 +316,22 @@ export default function DeckView({
                         "{filteredWords[currentFlashcardIndex].exampleSentence}"
                       </p>
                     </div>
+
+                    {filteredWords[currentFlashcardIndex].synonyms && filteredWords[currentFlashcardIndex].synonyms.length > 0 && (
+                      <div>
+                        <span className="text-[9px] text-neutral-500 font-semibold uppercase block mb-1">Synonyms</span>
+                        <div className="flex flex-wrap gap-1">
+                          {filteredWords[currentFlashcardIndex].synonyms.map((syn, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[10px] bg-neutral-950/70 border border-neutral-800/80 px-2 py-0.5 rounded-md text-amber-400 font-medium"
+                            >
+                              {syn}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-[9px] text-neutral-500 border-t border-neutral-850 pt-1 text-center">
@@ -416,13 +432,28 @@ export default function DeckView({
                   </div>
 
                   {/* Accordion detail snippet */}
-                  <div className="bg-neutral-900/40 p-2.5 rounded-lg border border-neutral-850 text-[10px] leading-relaxed text-neutral-400">
-                    <p className="mb-1 text-neutral-300">
-                      <strong>Def: </strong>{word.definition}
+                  <div className="bg-neutral-900/40 p-2.5 rounded-lg border border-neutral-850 text-[10px] leading-relaxed text-neutral-400 flex flex-col gap-1.5">
+                    <p className="text-neutral-300">
+                      <strong className="text-neutral-400 font-semibold">Def: </strong>{word.definition}
                     </p>
                     <p className="italic text-[9.5px]">
-                      <strong>Eg: </strong>"{word.exampleSentence}"
+                      <strong className="not-italic text-neutral-400 font-semibold">Eg: </strong>"{word.exampleSentence}"
                     </p>
+                    {word.synonyms && word.synonyms.length > 0 && (
+                      <div className="pt-1.5 mt-0.5 border-t border-neutral-850/60 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[9px] text-neutral-500 uppercase font-semibold tracking-wider">Synonyms:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {word.synonyms.map((syn, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[9px] bg-neutral-900/80 border border-neutral-800 px-1.5 py-0.5 rounded text-amber-400 font-medium"
+                            >
+                              {syn}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

@@ -504,26 +504,57 @@ export default function App() {
 
     if (!silent) setIsSyncing(true);
     try {
+      // Safe merge before saving: ensure we do not accidentally drop any words that exist in cloud
+      let finalSavedWords = [...savedWords];
+      let finalMasteredWords = [...masteredWords];
+      try {
+        const existingCloud = await clientLoadUserDeck(user.uid);
+        if (existingCloud?.savedWords && Array.isArray(existingCloud.savedWords)) {
+          existingCloud.savedWords.forEach((cw: Word) => {
+            if (cw && cw.word && !finalSavedWords.some(lw => lw.word.toLowerCase() === cw.word.toLowerCase())) {
+              finalSavedWords.push(cw);
+            }
+          });
+        }
+        if (existingCloud?.masteredWords && Array.isArray(existingCloud.masteredWords)) {
+          finalMasteredWords = Array.from(new Set([...finalMasteredWords, ...existingCloud.masteredWords]));
+        }
+        // If we found extra words in cloud, update our local state too!
+        if (finalSavedWords.length > savedWords.length) {
+          setSavedWords(finalSavedWords);
+        }
+        if (finalMasteredWords.length > masteredWords.length) {
+          setMasteredWords(finalMasteredWords);
+        }
+      } catch {
+        // If cloud read fails during safe merge, continue with local words
+      }
+
       const statsPayload: UserStats = {
         streak,
         lastCompletedDate: completedDates[completedDates.length - 1] || null,
         completedDates,
-        totalWordsLearned: savedWords.length
+        totalWordsLearned: finalSavedWords.length
       };
 
       const syncPayload: SyncData = {
         stats: statsPayload,
-        savedWords,
-        masteredWords
+        savedWords: finalSavedWords,
+        masteredWords: finalMasteredWords
       };
 
       // client-side Firebase user UID write
       let success = await clientSaveUserDeck(user.uid, syncPayload);
 
       if (success) {
-        lastSyncedPayloadRef.current = currentPayload;
+        lastSyncedPayloadRef.current = JSON.stringify({
+          savedWords: finalSavedWords.map(w => w.word.toLowerCase()).sort(),
+          masteredWords: [...finalMasteredWords].sort(),
+          streak,
+          completedDates: [...completedDates].sort()
+        });
         if (!silent) {
-          showToast("✓ Synced vocabulary bank to secure cloud profile!");
+          showToast(`✓ Synced ${finalSavedWords.length} words to your Google Cloud profile!`);
         }
       } else {
         throw new Error("Unable to save sync state to cloud. Please verify setup.");
@@ -1037,6 +1068,7 @@ export default function App() {
                     <SyncView
                       user={user}
                       onCloudSave={handleUserDeckSave}
+                      onCloudLoad={() => handleUserDeckLoad(user.uid, false)}
                       isSyncing={isSyncing}
                     />
                   )}
