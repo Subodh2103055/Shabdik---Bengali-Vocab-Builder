@@ -3,6 +3,7 @@ import { Volume2, Bookmark, Check, RefreshCw, BookOpen, Star, HelpCircle, Award,
 import { motion, AnimatePresence } from 'motion/react';
 import { Word, Difficulty } from '../types';
 import LinguisticLoader from './LinguisticLoader';
+import PronunciationBadge from './PronunciationBadge';
 import { speakText } from '../lib/tts';
 
 interface HomeViewProps {
@@ -254,22 +255,16 @@ export default function HomeView({
               </div>
 
               {/* Word & Pronunciation */}
-              <div className="mb-2">
+              <div className="mb-3">
                 <h2 className="text-3xl font-extrabold text-neutral-50 tracking-tight font-sans">
                   {currentWord.word}
                 </h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="font-mono text-xs text-neutral-400 tracking-wider">
-                    {currentWord.ipa}
-                  </span>
-                  <button
-                    onClick={speakWord}
-                    className="p-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 text-amber-400 transition-all shadow-sm"
-                    title="Pronounce IPA Voice"
-                  >
-                    <Volume2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                <PronunciationBadge
+                  word={currentWord.word}
+                  ipa={currentWord.ipa}
+                  size="normal"
+                  showAudioButton={true}
+                />
               </div>
 
               {/* Bengali Primary Meaning */}

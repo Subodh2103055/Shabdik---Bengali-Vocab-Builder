@@ -3,6 +3,7 @@ import { Search, Star, Trash2, ArrowLeftRight, Volume2, HelpCircle, Layers, Chec
 import { motion, AnimatePresence } from 'motion/react';
 import { Word, Difficulty } from '../types';
 import { speakText } from '../lib/tts';
+import PronunciationBadge from './PronunciationBadge';
 
 interface DeckViewProps {
   savedWords: Word[];
@@ -318,13 +319,16 @@ export default function DeckView({
                     </span>
                   </div>
 
-                  <div className="text-center flex flex-col items-center py-4">
+                  <div className="text-center flex flex-col items-center py-3">
                     <h1 className="text-3xl font-extrabold text-neutral-50 tracking-tight">
                       {filteredWords[currentFlashcardIndex].word}
                     </h1>
-                    <span className="font-mono text-xs text-neutral-500 mt-1 leading-none">
-                      {filteredWords[currentFlashcardIndex].ipa}
-                    </span>
+                    <PronunciationBadge
+                      word={filteredWords[currentFlashcardIndex].word}
+                      ipa={filteredWords[currentFlashcardIndex].ipa}
+                      size="flashcard"
+                      showAudioButton={false}
+                    />
                   </div>
 
                   {/* Front card bottom bar with direct Quick-Nav and Audio */}
@@ -487,14 +491,12 @@ export default function DeckView({
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-extrabold text-neutral-50">{word.word}</span>
-                        <button
-                          onClick={() => playPronunciation(word.word)}
-                          className="p-1 rounded bg-neutral-900 border border-neutral-850 hover:bg-neutral-800 text-amber-400 hover:text-amber-300 transition-all shadow-sm flex items-center justify-center cursor-pointer"
-                          title="Hear Pronunciation"
-                        >
-                          <Volume2 className="w-3 h-3" />
-                        </button>
-                        <span className="text-[9px] font-mono text-neutral-400">{word.ipa}</span>
+                        <PronunciationBadge
+                          word={word.word}
+                          ipa={word.ipa}
+                          size="compact"
+                          showAudioButton={true}
+                        />
                         <span className="text-[8px] uppercase font-bold text-neutral-500 bg-neutral-900/60 px-1.5 py-0.2 rounded">
                           {word.partOfSpeech}
                         </span>
